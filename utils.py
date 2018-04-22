@@ -213,7 +213,7 @@ def validate(net, data_loader, metrics, is_test):
         if loss.numel() == 1:
             print(loss.view(1)[0])
         else:
-            print(loss)
+            print(list(loss))
         results.append(loss)
 
     if origin_training:
@@ -261,6 +261,29 @@ def accuracy(outp, target, net):
     _, target_values = Variable(target).max(1)
 
     return (predict == target_values).float().mean()
+
+def sensitivity_specificity(net, data_loader):
+    subgroups = [[1], [0]]
+    results = []
+    for group in subgroups:
+        correct_count = 0
+        total_count = 0
+        for batch in data_loader:
+            inpt, target = batch
+            inpt = Variable(inpt)
+            target = Variable(target)
+
+            outp = net(inpt)
+            _, predict = outp.data.max(1)
+            _, target_values = target.data.max(1)
+
+            for i in range(inpt.shape[0]):
+                if target_values[i] in group:
+                    correct_count += 1 if predict[i] == target_values[i] else 0
+                    total_count +=1
+        results.append(correct_count / total_count)
+
+    return Variable(torch.Tensor(results))
 
 def simple_loss(tensor_loss):
     """Transform  a function of the form of (outp: Variable, target: Variable) -> loss: Varaible
