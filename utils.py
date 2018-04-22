@@ -1,4 +1,6 @@
 import math
+from functools import wraps
+from typing import List
 
 import numpy as np
 import torch
@@ -117,3 +119,152 @@ def mul_info(matrix, bins):
     
     return hx - hxy
 
+def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loader, validation_data_loader=None,
+                          update_callback=None):
+    """Train the net
+    
+    loss: (outp: Variable or [Variable], target: Tensor or [Tensor], net) -> Variable
+    a metric: (net, data_loader) -> Variable
+    """
+    training_metrics = []
+    validation_metrics = []
+    test_metrics = []
+    
+    iteration_count = 0
+    for i in range(epoch):
+        print('epoch ', i)
+        print('')
+        running_loss = 0.0
+        for j, batch in enumerate(train_data_loader):
+            inpt, target = batch
+            v_inpt = Variable(inpt)
+                        
+            optimizer.zero_grad()
+            outp = net(v_inpt)
+            
+            losses = loss(outp, target, net)
+            loss_value = sum(losses) if isinstance(losses, list) else losses
+            loss_value.backward()            
+                        
+            optimizer.step()
+                    
+            if update_callback is not None:
+                update_callback(net, i, iteration_count)
+                            
+            iteration_count += 1
+        
+        print('training:')
+        metric_values = validate(net, train_data_loader, metrics, False)
+        training_metrics.append(metric_values)
+        
+        if validation_data_loader is not None:
+            print('')
+            print('validation:')
+            metric_values = validate(net, validation_data_loader, metrics, False)
+            validation_metrics.append(metric_values)
+
+        print('')
+        print('test:')
+        metric_values = validate(net, test_data_loader, metrics, True)
+        test_metrics.append(metric_values)
+        
+        print('--')
+
+    if validation_data_loader is not None:
+        history = [training_metrics, validation_metrics, test_metrics]
+    else:
+        history = [training_metrics, test_metrics]
+
+    return history
+
+def show_training_history(epoch_history):
+    def flatten_metrics(metrics: List[Variable]) -> Variable:
+        """Makes a single Variable that is the cat of all metrics"""
+        return torch.cat([a_metric.view(-1) for a_metric in metrics])
+
+    def stack_between_epochs(one_category_metrics: List[List[Variable]]):
+        return torch.stack([flatten_metrics(metrics) for metrics in one_category_metrics])
+
+    def stack_between_categories(epoch_history):
+        return torch.stack([stack_between_epochs(one_category_metrics) for one_category_metrics in epoch_history])
+
+    # Construct a tensor of size (category, epoch, metric),
+    # where category means training, validation, test
+    tensor_epoch_history = stack_between_categories(epoch_history)
+
+    for metric_index in range(tensor_epoch_history.size()[2]):
+        epochs = tensor_epoch_history.size()[1]
+
+        for category_index in range(tensor_epoch_history.size()[0]):
+            plt.plot(range(epochs), tensor_epoch_history[category_index, :, metric_index].numpy())
+        plt.show()
+
+def validate(net, data_loader, metrics, is_test):
+    origin_training = net.training
+
+    net.eval()
+
+    if is_test:
+        print('------>')
+
+    results = []
+    for m in metrics:
+        loss = m(net, data_loader).data
+        if loss.numel() == 1:
+            print(loss.view(1)[0])
+        else:
+            print(loss)
+        results.append(loss)
+
+    if origin_training:
+        net.train()
+
+    return results
+
+def batch_accumulate(batch_average=True):
+    """Transform a function of the form of (outp: Variable or [Variable], target: Tensor or [Tensor], net) -> metric: Varaible
+     to the form of (net, data_loader) -> metric: Varaible"""
+    def transform(f):
+        @wraps(f)
+        def accumulating_f(net, data_loader):
+            acc = 0
+            count = 0
+            for batch in data_loader:
+                inpt, target = batch
+                batch_size = len(inpt)
+                inpt = Variable(inpt)
+                
+                outp = net(inpt)
+
+                metric = f(outp, target, net)
+                
+                if batch_average:
+                    acc += batch_size * metric
+                else:
+                    acc += metric
+
+                count += batch_size
+
+            if batch_average:
+                if count == 0:
+                    return 0
+                else:
+                    return acc / count
+            else:
+                return acc
+        return accumulating_f
+    return transform
+
+@batch_accumulate()
+def accuracy(outp, target, net):
+    _, predict = outp.max(1)
+    _, target_values = Variable(target).max(1)
+
+    return (predict == target_values).float().mean()
+
+def simple_loss(tensor_loss):
+    """Transform  a function of the form of (outp: Variable, target: Variable) -> loss: Varaible
+     to the form of (outp: Variable, target: Tensor, net) -> loss: Varaible"""
+    def needed_loss(outp, target, net):
+        return tensor_loss(outp, Variable(target))
+    return needed_loss
