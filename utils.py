@@ -127,6 +127,9 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loa
     
     loss: (outp: Variable or [Variable], target: Tensor or [Tensor], net) -> Variable
     a metric: (net, data_loader) -> Variable
+
+    Return value:
+    A tensor of size (category, epoch, metric)
     """
     training_metrics = []
     validation_metrics = []
@@ -176,13 +179,13 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loa
         print('--')        
 
     if validation_data_loader is not None:
-        history = [training_metrics, validation_metrics, test_metrics]
+        history = _tensor_history([training_metrics, validation_metrics, test_metrics])
     else:
-        history = [training_metrics, test_metrics]
+        history = _tensor_history([training_metrics, test_metrics])
 
     return history
 
-def show_training_history(epoch_history):
+def _tensor_history(epoch_history):
     def flatten_metrics(metrics: List[Variable]) -> Variable:
         """Makes a single Variable that is the cat of all metrics"""
         return torch.cat([a_metric.view(-1) for a_metric in metrics])
@@ -195,8 +198,9 @@ def show_training_history(epoch_history):
 
     # Construct a tensor of size (category, epoch, metric),
     # where category means training, validation, test
-    tensor_epoch_history = stack_between_categories(epoch_history)
+    return stack_between_categories(epoch_history)
 
+def show_training_history(tensor_epoch_history):
     for metric_index in range(tensor_epoch_history.size()[2]):
         epochs = tensor_epoch_history.size()[1]
 
