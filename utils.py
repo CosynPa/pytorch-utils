@@ -367,3 +367,14 @@ class SimpleLoader:
         
     def __iter__(self):
         return SimpleLoaderIter(self.data, self.labels, self.batch_size, self.noise)
+
+class IterableOperator:
+    def __init__(self, iterator_constructor):
+        self.iterator_constructor = iterator_constructor
+
+    def __iter__(self):
+        # Create a brand new iterator
+        return self.iterator_constructor()
+
+def map_iterable(f, iterable):
+    return IterableOperator(lambda : map(f, iterable))
