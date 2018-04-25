@@ -1,6 +1,7 @@
 import math
 from functools import wraps
 from typing import List
+import random
 
 import numpy as np
 import torch
@@ -9,6 +10,7 @@ import torch.nn as nn
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 from torch.autograd import Variable
+import sklearn.metrics
 
 def one_hot_encode(labels, number_cases):
     index = labels.unsqueeze(1)
@@ -27,7 +29,7 @@ def where(condition, x, y):
     float_condition = condition.float()
     return float_condition * x + (1 - float_condition) * y
 
-def constrain_max_norm_(tensor, norm, dim):
+def constrain_max_norm_(tensor, norm, dim=1):
     norm_ratio = tensor.norm(p=2, dim=dim, keepdim=True) / norm
     norm_coeff = where(norm_ratio > 1, norm_ratio, 1)
     tensor /= norm_coeff
@@ -120,7 +122,7 @@ def mul_info(matrix, bins):
     return hx - hxy
 
 def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loader, validation_data_loader=None,
-                          update_callback=None):
+                          batch_update_callback=None, epoch_update_callback=None):
     """Train the net
     
     loss: (outp: Variable or [Variable], target: Tensor or [Tensor], net) -> Variable
@@ -148,27 +150,30 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loa
                         
             optimizer.step()
                     
-            if update_callback is not None:
-                update_callback(net, i, iteration_count)
+            if batch_update_callback is not None:
+                batch_update_callback(net, i, iteration_count)
                             
             iteration_count += 1
+
+        if epoch_update_callback is not None:
+            epoch_update_callback(net, i, iteration_count)
         
         print('training:')
-        metric_values = validate(net, train_data_loader, metrics, False)
+        metric_values = validate(net, train_data_loader, metrics, eval_net=False)
         training_metrics.append(metric_values)
         
         if validation_data_loader is not None:
             print('')
             print('validation:')
-            metric_values = validate(net, validation_data_loader, metrics, False)
+            metric_values = validate(net, validation_data_loader, metrics, eval_net=True)
             validation_metrics.append(metric_values)
 
         print('')
         print('test:')
-        metric_values = validate(net, test_data_loader, metrics, True)
+        metric_values = validate(net, test_data_loader, metrics, eval_net=True, show_test_mark=True)
         test_metrics.append(metric_values)
         
-        print('--')
+        print('--')        
 
     if validation_data_loader is not None:
         history = [training_metrics, validation_metrics, test_metrics]
@@ -199,12 +204,12 @@ def show_training_history(epoch_history):
             plt.plot(range(epochs), tensor_epoch_history[category_index, :, metric_index].numpy())
         plt.show()
 
-def validate(net, data_loader, metrics, is_test):
-    origin_training = net.training
+def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False):
+    if eval_net:
+        originally_training = net.training
+        net.eval()
 
-    net.eval()
-
-    if is_test:
+    if show_test_mark:
         print('------>')
 
     results = []
@@ -216,8 +221,9 @@ def validate(net, data_loader, metrics, is_test):
             print(list(loss))
         results.append(loss)
 
-    if origin_training:
-        net.train()
+    if eval_net:
+        if originally_training:
+            net.train()
 
     return results
 
@@ -291,3 +297,73 @@ def simple_loss(tensor_loss):
     def needed_loss(outp, target, net):
         return tensor_loss(outp, Variable(target))
     return needed_loss
+
+def show_roc(net, data_loader, index):
+    originally_training = net.training
+    net.eval()
+
+    predicts = []
+    targets = []
+    for batch in data_loader:
+        inpt, target = batch
+        inpt = Variable(inpt)
+
+        predict = net(inpt)
+        
+        predicts.append(predict.data)
+        targets.append(target)
+
+    total_predicts = torch.cat(predicts)
+    total_targets = torch.cat(targets)
+
+    false_positive, true_positive, _ = sklearn.metrics.roc_curve(total_targets[:, index], total_predicts[:, index])
+    plt.plot(false_positive, true_positive)
+
+    if originally_training:
+        net.train()
+
+    return sklearn.metrics.roc_auc_score(total_targets[:, index], total_predicts[:, index])
+
+def linear_models(sequence):
+    return [model for model in sequence if isinstance(model, nn.Linear)]
+
+class SimpleLoaderIter:
+    def __init__(self, data, labels, batch_size, noise):
+        self.data = data
+        self.labels = labels
+        self.batch_size = batch_size
+        self.current_index = 0
+        self.noise = noise
+        
+    def __next__(self):
+        if self.current_index >= len(self.data):
+            raise StopIteration()
+        else:
+            batch_data = self.data[self.current_index:self.current_index + self.batch_size]
+            batch_labels = self.labels[self.current_index:self.current_index + self.batch_size]
+            
+            if self.noise != 0.0:
+                batch_data = batch_data + self.noise * torch.randn(batch_data.size())
+            
+            self.current_index += self.batch_size
+            return batch_data, batch_labels
+        
+
+class SimpleLoader:
+    def __init__(self, data, labels, batch_size, shuffle=True, noise=0.0):
+        if not shuffle:
+            self.data = data
+            self.labels = labels
+        else:
+            indices = list(range(len(data)))
+            random.shuffle(indices)
+            
+            self.data = data[indices]
+            self.labels = labels[indices]
+            
+        self.batch_size = batch_size
+        self.noise = noise
+            
+        
+    def __iter__(self):
+        return SimpleLoaderIter(self.data, self.labels, self.batch_size, self.noise)
