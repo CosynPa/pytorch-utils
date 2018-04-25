@@ -159,7 +159,7 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loa
             epoch_update_callback(net, i, iteration_count)
         
         print('training:')
-        metric_values = validate(net, train_data_loader, metrics, eval_net=False)
+        metric_values = validate(net, train_data_loader, metrics, eval_net=True)
         training_metrics.append(metric_values)
         
         if validation_data_loader is not None:
