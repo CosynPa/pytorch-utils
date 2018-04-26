@@ -282,7 +282,7 @@ def accuracy(outp, target, net):
     return (predict == target_values).float().mean()
 
 def sensitivity_specificity(net, data_loader):
-    subgroups = [[1], [0]]
+    subgroups = [[1], [0]] # here assume the 0 label is negative, 1 label is positive
     results = []
     for group in subgroups:
         correct_count = 0
