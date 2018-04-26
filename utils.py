@@ -311,7 +311,11 @@ def simple_loss(tensor_loss):
         return tensor_loss(outp, Variable(target))
     return needed_loss
 
-def show_roc(net, data_loader, index, show=True):
+def show_roc(net, data_loader, index=1, show=True):
+    """Show and returns the AOC, false positive, true positive
+
+    index is the index of positive prediction
+    """
     originally_training = net.training
     net.eval()
 
