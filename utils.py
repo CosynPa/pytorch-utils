@@ -391,3 +391,30 @@ class IterableOperator:
 
 def map_iterable(f, iterable):
     return IterableOperator(lambda : map(f, iterable))
+
+class AverageNet(nn.Module):
+    def __init__(self, nets):
+        super().__init__()
+        self.nets = nets
+        for i, module in enumerate(nets):
+            self.add_module(str(i), module)
+        
+    def forward(self, x):
+        return sum(a_net(x) for a_net in self.nets) / len(self.nets)
+
+class MajorityVote(nn.Module):
+    def __init__(self, nets):
+        super().__init__()
+        self.nets = nets
+        for i, module in enumerate(nets):
+            self.add_module(str(i), module)
+        
+    def forward(self, x):
+        def predict(outp):
+            _, index = outp.max(dim=1)
+            return one_hot_encode(index.data, 2)
+        
+        votes = sum(predict(a_net(x)) for a_net in self.nets) / len(self.nets)
+        return Variable(votes)
+
+
