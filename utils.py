@@ -122,7 +122,8 @@ def mul_info(matrix, bins):
     return hx - hxy
 
 def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loader, validation_data_loader=None,
-                          batch_update_callback=None, epoch_update_callback=None):
+                          batch_update_callback=None, epoch_update_callback=None,
+                          print_results=True):
     """Train the net
     
     loss: (outp: Variable or [Variable], target: Tensor or [Tensor], net) -> Variable
@@ -131,14 +132,18 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loa
     Return value:
     A tensor of size (category, epoch, metric)
     """
+    def print_or_silent(*args):
+        if print_results:
+            print(*args)
+
     training_metrics = []
     validation_metrics = []
     test_metrics = []
     
     iteration_count = 0
     for i in range(epoch):
-        print('epoch ', i)
-        print('')
+        print_or_silent('epoch ', i)
+        print_or_silent('')
         running_loss = 0.0
         for j, batch in enumerate(train_data_loader):
             inpt, target = batch
@@ -161,22 +166,22 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loa
         if epoch_update_callback is not None:
             epoch_update_callback(net, i, iteration_count)
         
-        print('training:')
-        metric_values = validate(net, train_data_loader, metrics, eval_net=True)
+        print_or_silent('training:')
+        metric_values = validate(net, train_data_loader, metrics, eval_net=True, print_results=print_results)
         training_metrics.append(metric_values)
         
         if validation_data_loader is not None:
-            print('')
-            print('validation:')
-            metric_values = validate(net, validation_data_loader, metrics, eval_net=True)
+            print_or_silent('')
+            print_or_silent('validation:')
+            metric_values = validate(net, validation_data_loader, metrics, eval_net=True, print_results=print_results)
             validation_metrics.append(metric_values)
 
-        print('')
-        print('test:')
-        metric_values = validate(net, test_data_loader, metrics, eval_net=True, show_test_mark=True)
+        print_or_silent('')
+        print_or_silent('test:')
+        metric_values = validate(net, test_data_loader, metrics, eval_net=True, show_test_mark=True, print_results=print_results)
         test_metrics.append(metric_values)
         
-        print('--')        
+        print_or_silent('--')        
 
     if validation_data_loader is not None:
         history = _tensor_history([training_metrics, validation_metrics, test_metrics])
@@ -208,21 +213,25 @@ def show_training_history(tensor_epoch_history):
             plt.plot(range(epochs), tensor_epoch_history[category_index, :, metric_index].numpy())
         plt.show()
 
-def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False):
+def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, print_results=True):
+    def print_or_silent(*args):
+        if print_results:
+            print(*args)
+
     if eval_net:
         originally_training = net.training
         net.eval()
 
     if show_test_mark:
-        print('------>')
+        print_or_silent('------>')
 
     results = []
     for m in metrics:
         loss = m(net, data_loader).data
         if loss.numel() == 1:
-            print(loss.view(1)[0])
+            print_or_silent(loss.view(1)[0])
         else:
-            print(list(loss))
+            print_or_silent(list(loss))
         results.append(loss)
 
     if eval_net:
