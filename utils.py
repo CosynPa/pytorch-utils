@@ -121,7 +121,7 @@ def mul_info(matrix, bins):
     
     return hx - hxy
 
-def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loader, validation_data_loader=None,
+def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_data_loader=None, test_data_loader=None,
                           batch_update_callback=None, epoch_update_callback=None,
                           print_results=True):
     """Train the net
@@ -176,19 +176,23 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, test_data_loa
             metric_values = validate(net, validation_data_loader, metrics, eval_net=True, print_results=print_results)
             validation_metrics.append(metric_values)
 
-        print_or_silent('')
-        print_or_silent('test:')
-        metric_values = validate(net, test_data_loader, metrics, eval_net=True, show_test_mark=True, print_results=print_results)
-        test_metrics.append(metric_values)
+        if test_data_loader is not None:
+            print_or_silent('')
+            print_or_silent('test:')
+            metric_values = validate(net, test_data_loader, metrics, eval_net=True, show_test_mark=True, print_results=print_results)
+            test_metrics.append(metric_values)
         
         print_or_silent('--')        
 
-    if validation_data_loader is not None:
-        history = _tensor_history([training_metrics, validation_metrics, test_metrics])
-    else:
-        history = _tensor_history([training_metrics, test_metrics])
+    history = [training_metrics]
 
-    return history
+    if validation_data_loader is not None:
+        history.append(validation_metrics)
+
+    if test_data_loader is not None:
+        history.append(test_metrics)
+
+    return _tensor_history(history)
 
 def _tensor_history(epoch_history):
     def flatten_metrics(metrics: List[Variable]) -> Variable:
