@@ -311,7 +311,7 @@ def simple_loss(tensor_loss):
         return tensor_loss(outp, Variable(target))
     return needed_loss
 
-def show_roc(net, data_loader, index):
+def show_roc(net, data_loader, index, show=True):
     originally_training = net.training
     net.eval()
 
@@ -330,12 +330,13 @@ def show_roc(net, data_loader, index):
     total_targets = torch.cat(targets)
 
     false_positive, true_positive, _ = sklearn.metrics.roc_curve(total_targets[:, index], total_predicts[:, index])
-    plt.plot(false_positive, true_positive)
+    if show:
+        plt.plot(false_positive, true_positive)
 
     if originally_training:
         net.train()
 
-    return sklearn.metrics.roc_auc_score(total_targets[:, index], total_predicts[:, index])
+    return sklearn.metrics.roc_auc_score(total_targets[:, index], total_predicts[:, index]), false_positive, true_positive
 
 def linear_models(sequence):
     return [model for model in sequence if isinstance(model, nn.Linear)]
