@@ -9,7 +9,6 @@ import torch.nn.functional as F
 import torch.nn as nn
 from matplotlib import pyplot as plt
 import matplotlib as mpl
-from torch.autograd import Variable
 import sklearn.metrics
 
 def one_hot_encode(labels, number_cases):
@@ -25,19 +24,15 @@ def l1loss(net, factor):
 
     return factor * acc_loss
 
-def where(condition, x, y):
-    float_condition = condition.float()
-    return float_condition * x + (1 - float_condition) * y
-
 def constrain_max_norm_(tensor, norm, dim=1):
     norm_ratio = tensor.norm(p=2, dim=dim, keepdim=True) / norm
-    norm_coeff = where(norm_ratio > 1, norm_ratio, 1)
+    norm_coeff = torch.where(norm_ratio > 1, norm_ratio, torch.ones_like(norm_ratio))
     tensor /= norm_coeff
     
 def l1_updated_(tensor, lr):
     assert lr >= 0
     
-    return tensor.copy_(where(tensor.abs() < lr, 0, tensor - tensor.sign() * lr))
+    return tensor.copy_(torch.where(tensor.abs() < lr, torch.zeros_like(tensor), tensor - tensor.sign() * lr))
 
 def image_of_matrix(matrix, max_value=None):
     feature = matrix
@@ -126,8 +121,8 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
                           print_results=True):
     """Train the net
     
-    loss: (outp: Variable or [Variable], target: Tensor or [Tensor], net) -> Variable
-    a metric: (net, data_loader) -> Variable
+    loss: (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> Tensor
+    a metric: (net, data_loader) -> Tensor
 
     Return value:
     A tensor of size (category, epoch, metric)
@@ -147,10 +142,9 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
         running_loss = 0.0
         for j, batch in enumerate(train_data_loader):
             inpt, target = batch
-            v_inpt = Variable(inpt)
                         
             optimizer.zero_grad()
-            outp = net(v_inpt)
+            outp = net(inpt)
             
             losses = loss(outp, target, net)
             loss_value = sum(losses) if isinstance(losses, list) else losses
@@ -195,11 +189,11 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
     return _tensor_history(history)
 
 def _tensor_history(epoch_history):
-    def flatten_metrics(metrics: List[Variable]) -> Variable:
-        """Makes a single Variable that is the cat of all metrics"""
-        return torch.cat([a_metric.view(-1) for a_metric in metrics])
+    def flatten_metrics(metrics: List[torch.Tensor]) -> torch.Tensor:
+        """Makes a single Tensor that is the cat of all metrics"""
+        return torch.cat([a_metric.view(-1).detach() for a_metric in metrics])
 
-    def stack_between_epochs(one_category_metrics: List[List[Variable]]):
+    def stack_between_epochs(one_category_metrics: List[List[torch.Tensor]]):
         return torch.stack([flatten_metrics(metrics) for metrics in one_category_metrics])
 
     def stack_between_categories(epoch_history):
@@ -231,11 +225,11 @@ def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, pri
 
     results = []
     for m in metrics:
-        loss = m(net, data_loader).data
+        loss = m(net, data_loader).detach()
         if loss.numel() == 1:
-            print_or_silent(loss.view(1)[0])
+            print_or_silent(loss.view([]).item())
         else:
-            print_or_silent(list(loss))
+            print_or_silent(loss.tolist())
         results.append(loss)
 
     if eval_net:
@@ -245,8 +239,8 @@ def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, pri
     return results
 
 def batch_accumulate(batch_average=True):
-    """Transform a function of the form of (outp: Variable or [Variable], target: Tensor or [Tensor], net) -> metric: Varaible
-     to the form of (net, data_loader) -> metric: Varaible"""
+    """Transform a function of the form of (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> metric: Tensor
+     to the form of (net, data_loader) -> metric: Tensor"""
     def transform(f):
         @wraps(f)
         def accumulating_f(net, data_loader):
@@ -255,7 +249,6 @@ def batch_accumulate(batch_average=True):
             for batch in data_loader:
                 inpt, target = batch
                 batch_size = len(inpt)
-                inpt = Variable(inpt)
                 
                 outp = net(inpt)
 
@@ -281,9 +274,9 @@ def batch_accumulate(batch_average=True):
 @batch_accumulate()
 def accuracy(outp, target, net):
     _, predict = outp.max(1)
-    _, target_values = Variable(target).max(1)
+    _, target_values = target.max(1)
 
-    return (predict == target_values).float().mean()
+    return (predict == target_values).detach().float().mean()
 
 def sensitivity_specificity(net, data_loader):
     subgroups = [[1], [0]] # here assume the 0 label is negative, 1 label is positive
@@ -293,12 +286,10 @@ def sensitivity_specificity(net, data_loader):
         total_count = 0
         for batch in data_loader:
             inpt, target = batch
-            inpt = Variable(inpt)
-            target = Variable(target)
 
             outp = net(inpt)
-            _, predict = outp.data.max(1)
-            _, target_values = target.data.max(1)
+            _, predict = outp.detach().max(1)
+            _, target_values = target.detach().max(1)
 
             for i in range(inpt.shape[0]):
                 if target_values[i] in group:
@@ -306,13 +297,13 @@ def sensitivity_specificity(net, data_loader):
                     total_count +=1
         results.append(correct_count / total_count)
 
-    return Variable(torch.Tensor(results))
+    return torch.tensor(results)
 
 def simple_loss(tensor_loss):
-    """Transform  a function of the form of (outp: Variable, target: Variable) -> loss: Varaible
-     to the form of (outp: Variable, target: Tensor, net) -> loss: Varaible"""
+    """Transform  a function of the form of (outp: Tensor, target: Tensor) -> loss: Tensor
+     to the form of (outp: Tensor, target: Tensor, net) -> loss: Tensor"""
     def needed_loss(outp, target, net):
-        return tensor_loss(outp, Variable(target))
+        return tensor_loss(outp, target)
     return needed_loss
 
 def show_roc(net, data_loader, index=1, show=True):
@@ -327,15 +318,14 @@ def show_roc(net, data_loader, index=1, show=True):
     targets = []
     for batch in data_loader:
         inpt, target = batch
-        inpt = Variable(inpt)
 
         predict = net(inpt)
         
-        predicts.append(predict.data)
+        predicts.append(predict)
         targets.append(target)
 
-    total_predicts = torch.cat(predicts)
-    total_targets = torch.cat(targets)
+    total_predicts = torch.cat(predicts).detach()
+    total_targets = torch.cat(targets).detach()
 
     false_positive, true_positive, _ = sklearn.metrics.roc_curve(total_targets[:, index], total_predicts[:, index])
     if show:
@@ -424,6 +414,6 @@ class MajorityVote(nn.Module):
             return one_hot_encode(index.data, 2)
         
         votes = sum(predict(a_net(x)) for a_net in self.nets) / len(self.nets)
-        return Variable(votes)
+        return votes
 
 
