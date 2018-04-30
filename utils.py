@@ -364,7 +364,7 @@ class SimpleLoaderIter:
         
 
 class SimpleLoader:
-    def __init__(self, data, labels, batch_size, shuffle=True, noise=0.0):
+    def __init__(self, data, labels, batch_size, noise=0.0, shuffle=True):
         if not shuffle:
             self.data = data
             self.labels = labels
