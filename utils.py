@@ -60,7 +60,7 @@ def image_of_matrix(matrix, max_value=None):
             x = min(1.0, -weight / absolute)
             return mpl.colors.hsv_to_rgb(np.array([0.9, x, 1]))
 
-    return np.vectorize(weight_to_rgb, signature='()->(m)')(feature.cpu().numpy() if feature.is_cuda else feature.numpy())
+    return np.vectorize(weight_to_rgb, signature='()->(m)')(feature.cpu().numpy() if feature.is_cuda else feature.cpu().numpy())
 
 def show_matrixes(tensor, max_value=None):
     length = len(tensor)
@@ -214,7 +214,7 @@ def show_training_history(tensor_epoch_history):
         epochs = tensor_epoch_history.size()[1]
 
         for category_index in range(tensor_epoch_history.size()[0]):
-            plt.plot(range(epochs), tensor_epoch_history[category_index, :, metric_index].numpy())
+            plt.plot(range(epochs), tensor_epoch_history[category_index, :, metric_index].cpu().numpy())
         plt.show()
 
 def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, print_results=True):
