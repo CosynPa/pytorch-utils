@@ -11,6 +11,12 @@ from matplotlib import pyplot as plt
 import matplotlib as mpl
 import sklearn.metrics
 
+def set_defaut_device():
+    if torch.cuda.is_available():
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+    else:
+        torch.set_default_tensor_type(torch.FloatTensor)
+
 def one_hot_encode(labels, number_cases):
     index = labels.unsqueeze(1)
     one_hot = torch.Tensor(len(labels), number_cases).zero_()
