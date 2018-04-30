@@ -346,12 +346,11 @@ def linear_models(sequence):
     return [model for model in sequence if isinstance(model, nn.Linear)]
 
 class SimpleLoaderIter:
-    def __init__(self, data, labels, batch_size, noise):
+    def __init__(self, data, labels, batch_size):
         self.data = data
         self.labels = labels
         self.batch_size = batch_size
         self.current_index = 0
-        self.noise = noise
         
     def __next__(self):
         if self.current_index >= len(self.data):
@@ -359,10 +358,7 @@ class SimpleLoaderIter:
         else:
             batch_data = self.data[self.current_index:self.current_index + self.batch_size]
             batch_labels = self.labels[self.current_index:self.current_index + self.batch_size]
-            
-            if self.noise != 0.0:
-                batch_data = batch_data + self.noise * torch.randn(batch_data.size())
-            
+                        
             self.current_index += self.batch_size
             return batch_data, batch_labels
         
@@ -384,7 +380,11 @@ class SimpleLoader:
             
         
     def __iter__(self):
-        return SimpleLoaderIter(self.data, self.labels, self.batch_size, self.noise)
+        if self.noise != 0:
+            noise_tensor = torch.randn_like(self.data) * self.noise
+        
+        return SimpleLoaderIter(self.data + noise_tensor if self.noise !=0 else self.data,
+                                 self.labels, self.batch_size)
 
 class IterableOperator:
     def __init__(self, iterator_constructor):
