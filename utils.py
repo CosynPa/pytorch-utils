@@ -129,6 +129,7 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
     
     loss: (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> Tensor
     a metric: (net, data_loader) -> Tensor
+    batch_update_callback can return a tensor
 
     Return value:
     A tensor of size (category, epoch, metric)
@@ -140,6 +141,8 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
     training_metrics = []
     validation_metrics = []
     test_metrics = []
+
+    batch_metrics = []
     
     iteration_count = 0
     for i in range(epoch):
@@ -159,7 +162,9 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
             optimizer.step()
                     
             if batch_update_callback is not None:
-                batch_update_callback(net, i, iteration_count)
+                t = batch_update_callback(net, i, iteration_count)
+                if t is not None:
+                    batch_metrics.append(t)
                             
             iteration_count += 1
 
@@ -192,7 +197,10 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
     if test_data_loader is not None:
         history.append(test_metrics)
 
-    return _tensor_history(history)
+    if len(batch_metrics) > 0:
+        return (_tensor_history(history), torch.stack(batch_metrics))
+    else:
+        return _tensor_history(history)
 
 def _tensor_history(epoch_history):
     def flatten_metrics(metrics: List[torch.Tensor]) -> torch.Tensor:
@@ -209,13 +217,26 @@ def _tensor_history(epoch_history):
     # where category means training, validation, test
     return stack_between_categories(epoch_history)
 
-def show_training_history(tensor_epoch_history):
-    for metric_index in range(tensor_epoch_history.size()[2]):
-        epochs = tensor_epoch_history.size()[1]
+def show_training_history(history):
+    def show_one_type(tensor_history):
+        """tensor_history has size  (category, epoch, metric)"""
+        for metric_index in range(tensor_history.size()[2]):
+            epochs = tensor_history.size()[1]
 
-        for category_index in range(tensor_epoch_history.size()[0]):
-            plt.plot(range(epochs), tensor_epoch_history[category_index, :, metric_index].cpu().numpy())
-        plt.show()
+            for category_index in range(tensor_history.size()[0]):
+                plt.plot(range(epochs), tensor_history[category_index, :, metric_index].cpu().numpy())
+            plt.show()
+
+    if isinstance(history, tuple):
+        tensor_epoch_history, tensor_batch_history = history
+        # tensor_batch_history is a tensor of size (batch_index, value), add a category dimention
+        tensor_batch_history.unsqueeze_(0)
+
+        show_one_type(tensor_epoch_history)
+        show_one_type(tensor_batch_history)
+    else:
+        tensor_epoch_history = history
+        show_one_type(tensor_epoch_history)
 
 def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, print_results=True):
     def print_or_silent(*args):
