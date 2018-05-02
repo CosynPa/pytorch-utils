@@ -83,10 +83,10 @@ def sparse_init_(matrix, ratio):
     for i in range(row):
         non_zero = int(column * ratio)
         
-        filling_position = cuda_like(torch.rand(1, column), matrix) > 1 - ratio
-        rand_weight = cuda_like(torch.randn(1, column), matrix) * (2 / np.sqrt(non_zero))
+        filling_position = torch.rand(1, column).to(matrix) > 1 - ratio
+        rand_weight = torch.randn(1, column).to(matrix) * (2 / np.sqrt(non_zero))
         
-        matrix[i] = rand_weight * filling_position.float()
+        matrix.data[i] = rand_weight * filling_position.float()
     return matrix
                
 def mul_info(matrix, bins):
