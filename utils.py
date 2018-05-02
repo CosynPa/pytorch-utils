@@ -41,7 +41,7 @@ def l1_updated_(tensor, lr):
     return tensor.copy_(torch.where(tensor.abs() < lr, torch.zeros_like(tensor), tensor - tensor.sign() * lr))
 
 def image_of_matrix(matrix, max_value=None):
-    feature = matrix
+    feature = matrix.detach()
         
     maximum = feature.max()
     minimum = feature.min()
@@ -71,13 +71,10 @@ def show_matrixes(tensor, max_value=None):
         
         plt.imshow(image_of_matrix(tensor[i]))
         
-def show_one_matrix(matrix, size=(8, 8)):
+def show_one_matrix(matrix, size=(8, 8), max_value=None):
     plt.figure(figsize=size)
-    plt.imshow(image_of_matrix(matrix))
-               
-def cuda_like(origin, like):
-    return origin.cuda() if like.is_cuda else origin
-               
+    plt.imshow(image_of_matrix(matrix, max_value))
+                              
 def sparse_init_(matrix, ratio):
     row, column = matrix.size()
     for i in range(row):
