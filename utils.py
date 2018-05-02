@@ -383,21 +383,20 @@ class SimpleLoaderIter:
 
 class SimpleLoader:
     def __init__(self, data, labels, batch_size, noise=0.0, shuffle=True):
-        if not shuffle:
-            self.data = data
-            self.labels = labels
-        else:
-            indices = list(range(len(data)))
-            random.shuffle(indices)
-            
-            self.data = data[indices]
-            self.labels = labels[indices]
-            
+        self.data = data
+        self.labels = labels            
         self.batch_size = batch_size
         self.noise = noise
-            
+        self.shuffle=shuffle
         
     def __iter__(self):
+        if self.shuffle:
+            indices = list(range(len(self.data)))
+            random.shuffle(indices)
+            
+            self.data = self.data[indices]
+            self.labels = self.labels[indices]
+
         if self.noise != 0:
             noise_tensor = torch.randn_like(self.data) * self.noise
         
