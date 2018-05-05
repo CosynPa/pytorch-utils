@@ -295,12 +295,13 @@ def batch_accumulate(batch_average=True):
         return accumulating_f
     return transform
 
-@batch_accumulate()
-def accuracy(outp, target, net):
+def batch_accuracy(outp, target, net):
     _, predict = outp.max(1)
     _, target_values = target.max(1)
 
     return (predict == target_values).detach().float().mean()
+
+accuracy = batch_accumulate()(batch_accuracy)
 
 def sensitivity_specificity(net, data_loader):
     subgroups = [[1], [0]] # here assume the 0 label is negative, 1 label is positive
