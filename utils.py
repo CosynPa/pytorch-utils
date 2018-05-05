@@ -126,6 +126,7 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
     
     loss: (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> Tensor
     a metric: (net, data_loader) -> Tensor
+    callbacks have parameter type (net, epoch, iteration)
     batch_update_callback can return a tensor
 
     Return value:
