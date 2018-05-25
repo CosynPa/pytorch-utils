@@ -120,13 +120,15 @@ def mul_info(matrix, bins):
     return hx - hxy
 
 def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_data_loader=None, test_data_loader=None,
-                          batch_update_callback=None, epoch_update_callback=None,
-                          print_results=True):
+          custom_optimize_step=None,
+          batch_update_callback=None, epoch_update_callback=None,
+          print_results=True):
     """Train the net
     
     loss: (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> Tensor
     a metric: (net, data_loader) -> Tensor
-    callbacks have parameter type (net, epoch, iteration)
+    custom_optimize_step has parameter type (net, inpt, target, epoch, iteration)
+    other callbacks have parameter types (net, epoch, iteration)
     batch_update_callback can return a tensor
 
     Return value:
@@ -150,14 +152,17 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
         for j, batch in enumerate(train_data_loader):
             inpt, target = batch
                         
-            optimizer.zero_grad()
-            outp = net(inpt)
-            
-            losses = loss(outp, target, net)
-            loss_value = sum(losses) if isinstance(losses, list) else losses
-            loss_value.backward()            
-                        
-            optimizer.step()
+            if custom_optimize_step is None:
+                optimizer.zero_grad()
+                outp = net(inpt)
+                
+                losses = loss(outp, target, net)
+                loss_value = sum(losses) if isinstance(losses, list) else losses
+                loss_value.backward()
+
+                optimizer.step()
+            else:
+                custom_optimize_step(net, inpt, target, i, iteration_count)
                     
             if batch_update_callback is not None:
                 t = batch_update_callback(net, i, iteration_count)
