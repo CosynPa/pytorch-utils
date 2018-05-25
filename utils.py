@@ -309,6 +309,10 @@ def batch_accuracy(outp, target, net):
 
 accuracy = batch_accumulate()(batch_accuracy)
 
+# Use this if you don't need any metric
+def zero_metric(net, data_loader):
+    return torch.tensor(0.0)
+
 def sensitivity_specificity(net, data_loader):
     subgroups = [[1], [0]] # here assume the 0 label is negative, 1 label is positive
     results = []
