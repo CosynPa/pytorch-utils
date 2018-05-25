@@ -201,11 +201,11 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
         history.append(test_metrics)
 
     if len(batch_metrics) > 0:
-        return (_tensor_history(history), torch.stack(batch_metrics))
+        return (make_tensor_history(history), torch.stack(batch_metrics))
     else:
-        return _tensor_history(history)
+        return make_tensor_history(history)
 
-def _tensor_history(epoch_history):
+def make_tensor_history(epoch_history):
     def flatten_metrics(metrics: List[torch.Tensor]) -> torch.Tensor:
         """Makes a single Tensor that is the cat of all metrics"""
         return torch.cat([a_metric.view(-1).detach() for a_metric in metrics])
