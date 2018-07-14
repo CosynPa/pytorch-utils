@@ -309,6 +309,25 @@ def batch_accuracy(outp, target, net):
 
 accuracy = batch_accumulate()(batch_accuracy)
 
+def cohen_kappa(net, data_loader):
+    predict_array = []
+    target_values_array = []
+    for batch in data_loader:
+        inpt, target = batch
+
+        outp = net(inpt)
+        _, predict = outp.detach().max(1)
+        _, target_values = target.detach().max(1)
+
+        predict_array.append(predict)
+        target_values_array.append(target_values)
+
+    all_predicts = torch.cat(predict_array)
+    all_targets = torch.cat(target_values_array)
+
+    kappa = sklearn.metric.cohen_kappa_score(all_predicts.cpu().numpy(), all_targets.cpu().numpy())
+    return torch.tensor(kappa)
+
 # Use this if you don't need any metric
 def zero_metric(net, data_loader):
     return torch.tensor(0.0)
