@@ -325,7 +325,7 @@ def cohen_kappa(net, data_loader):
     all_predicts = torch.cat(predict_array)
     all_targets = torch.cat(target_values_array)
 
-    kappa = sklearn.metric.cohen_kappa_score(all_predicts.cpu().numpy(), all_targets.cpu().numpy())
+    kappa = sklearn.metrics.cohen_kappa_score(all_predicts.cpu().numpy(), all_targets.cpu().numpy())
     return torch.tensor(kappa)
 
 # Use this if you don't need any metric
