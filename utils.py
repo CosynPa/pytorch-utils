@@ -360,6 +360,32 @@ def simple_loss(tensor_loss):
         return tensor_loss(outp, target)
     return needed_loss
 
+
+class OutputMapNet(nn.Module):
+    def __init__(self, net, func):
+        super().__init__()
+        self.net = net
+        self.func = func
+
+    def forward(self, x):
+        return self.func(self.net.forward(x))
+
+
+def map_metric(metric, output_map=None, target_map=None):
+    def new_metric(net, data_loader):
+        if output_map is not None:
+            mapped_net = OutputMapNet(net, output_map)
+        else:
+            mapped_net = net
+
+        if target_map is not None:
+            mapped_loader = map_iterable(lambda batch: (batch[0], target_map(batch[1])), data_loader)
+        else:
+            mapped_loader = data_loader
+        return metric(mapped_net, mapped_loader)
+    return new_metric
+
+
 def show_roc(net, data_loader, index=1, show=True):
     """Show and returns the AOC, false positive, true positive
 
