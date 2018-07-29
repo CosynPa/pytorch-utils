@@ -353,6 +353,15 @@ def sensitivity_specificity(net, data_loader):
 
     return torch.tensor(results)
 
+
+def auc_metric(index=1):
+    def metric(net, data_loader):
+        roc, _, _ = show_roc(net, data_loader, index, show=False)
+        return torch.tensor(roc)
+
+    return metric
+
+
 def simple_loss(tensor_loss):
     """Transform  a function of the form of (outp: Tensor, target: Tensor) -> loss: Tensor
      to the form of (outp: Tensor, target: Tensor, net) -> loss: Tensor"""
