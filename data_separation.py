@@ -61,6 +61,11 @@ def count_labels(labels):
 
 
 def balanced_index_separation(labels, separation):
+    """
+    separation is the array of numbers of the size of each data set.
+    For example [1560, 300, 200] means you want 3 subsets containing 1560, 300, 200 samples respectively.
+    The sum of separation should be the same as the sample size of the labels.
+    """
     ordered_label_types, ordered_label_numbers, indices_groups_by_label = count_labels(labels)
     label_numbers_in_sep = label_numbers_in_separation(separation, ordered_label_numbers)
     
@@ -80,3 +85,4 @@ def balanced_index_separation(labels, separation):
     for i in range(len(indices)):
         random.shuffle(indices[i])
     return indices
+
