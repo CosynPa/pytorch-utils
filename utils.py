@@ -167,7 +167,10 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
             if batch_update_callback is not None:
                 t = batch_update_callback(net, i, iteration_count)
                 if t is not None:
-                    batch_metrics.append(t)
+                    if len(t.size()) == 0:
+                        batch_metrics.append(torch.tensor([t.item()]))
+                    else:
+                        batch_metrics.append(t)
                             
             iteration_count += 1
 
