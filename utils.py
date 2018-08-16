@@ -362,6 +362,14 @@ def auc_metric(index=1):
     return metric
 
 
+def NLLLoss(size_average=True):
+    """Assume outp is log likelihood"""
+    def loss(outp, target):
+        x = (-target * outp).sum(dim=1)
+        return x.mean(dim=0) if size_average else x.sum(dim=0)
+    return loss
+
+
 def simple_loss(tensor_loss):
     """Transform  a function of the form of (outp: Tensor, target: Tensor) -> loss: Tensor
      to the form of (outp: Tensor, target: Tensor, net) -> loss: Tensor"""
