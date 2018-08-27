@@ -1,4 +1,5 @@
 import random
+import itertools
 
 import torch
 
@@ -86,3 +87,10 @@ def balanced_index_separation(labels, separation):
         random.shuffle(indices[i])
     return indices
 
+def split_by_ratios(total_number, ratios):
+    assert abs(sum(ratios) - 1) < 1e-5
+
+    accumulated_ratios = list(itertools.accumulate(ratios))
+    rounded = [int(round(ratio * total_number)) for ratio in accumulated_ratios]
+
+    return [rounded[i] - (rounded[i - 1] if i >= 1 else 0) for i in range(len(rounded))]
