@@ -47,6 +47,12 @@ def label_numbers_in_separation(separation, ordered_label_numbers):
 
 
 def count_labels(labels):
+    """
+    Return values:
+        ordered_label_types: the label values for example [0, 1] for binary classification
+        ordered_label_numbers: how many number of samples each label has
+        indices_groups_by_label: which indices have the label
+    """
     _, numbers = labels.max(dim=1)
     label_types = set(numbers.tolist())
 
