@@ -100,3 +100,24 @@ def split_by_ratios(total_number, ratios):
     rounded = [int(round(ratio * total_number)) for ratio in accumulated_ratios]
 
     return [rounded[i] - (rounded[i - 1] if i >= 1 else 0) for i in range(len(rounded))]
+
+
+def repeat_indices(original, destination_number):
+    repeat, remainder = divmod(destination_number, len(original))
+    
+    return original * repeat + random.sample(original, remainder)
+
+
+def balanced_sample_indices(data_labels):
+    """Note, a common pattern is 
+            balanced_indices = balanced_sample_indices(data_labels[training_indices])
+            balanced_training_data = data[training_indices][balanced_indices]
+            balanced_training_labels = data_labels[training_indices][balanced_indices]
+    """
+    _, ordered_label_numbers, indices_groups_by_label = count_labels(data_labels)
+    
+    max_number = max(ordered_label_numbers)
+    
+    result = sum((repeat_indices(indices, max_number) for indices in indices_groups_by_label), [])
+    random.shuffle(result)
+    return result
