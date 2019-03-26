@@ -374,8 +374,8 @@ def NLLLoss(size_average=True):
 
 
 def simple_loss(tensor_loss):
-    """Transform  a function of the form of (outp: Tensor, target: Tensor) -> loss: Tensor
-     to the form of (outp: Tensor, target: Tensor, net) -> loss: Tensor"""
+    """Transform  a function of the form of (outp: Tensor, target: Tensor) -> loss: Tensor to
+     the form of (outp: Tensor, target: Tensor, net) -> loss: Tensor"""
     def needed_loss(outp, target, net):
         return tensor_loss(outp, target)
     return needed_loss
