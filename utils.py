@@ -1,6 +1,6 @@
 import math
 from functools import wraps
-from typing import List
+from typing import List, Tuple
 import random
 
 import numpy as np
@@ -282,7 +282,7 @@ def batch_accumulate(batch_average=True):
             for batch in data_loader:
                 inpt, target = batch
                 batch_size = len(inpt)
-                
+
                 outp = net(inpt)
 
                 metric = f(outp, target, net)
@@ -304,13 +304,34 @@ def batch_accumulate(batch_average=True):
         return accumulating_f
     return transform
 
-def batch_accuracy(outp, target, net):
+
+def whole_accumulated(f):
+    """Transform a function of the form of (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> metric: Tensor
+         to the form of (net, data_loader) -> metric: Tensor"""
+
+    @wraps(f)
+    def accumulating_f(net, data_loader):
+        outp, targets = get_accumulated_pred_target(net, data_loader)
+        return f(outp, targets, net)
+    return accumulating_f
+
+
+def batch_accuracy(outp, target, net=None):
     _, predict = outp.max(1)
     _, target_values = target.max(1)
 
-    return (predict == target_values).detach().float().mean()
+    return single_batch_accuracy(predict, target_values)
 
-accuracy = batch_accumulate()(batch_accuracy)
+
+accuracy = whole_accumulated(batch_accuracy)
+
+
+def single_batch_accuracy(outp, target, net=None):
+    return (outp == target).detach().float().mean()
+
+
+single_accuracy = whole_accumulated(single_batch_accuracy)
+
 
 def cohen_kappa(net, data_loader):
     predict_array = []
@@ -335,7 +356,36 @@ def cohen_kappa(net, data_loader):
 def zero_metric(net, data_loader):
     return torch.tensor(0.0)
 
-def sensitivity_specificity(net, data_loader):
+def count_bool(tensor: torch.ByteTensor) -> float:
+    return tensor.float().sum().item()
+
+
+def single_batch_sensitivity_specificity(predicts, targets, net=None):
+    """targets and predicts are arrays of 0's and 1's"""
+
+    positive = count_bool(targets == 1)
+    negative = count_bool(targets == 0)
+    true_positive = count_bool((targets == 1) & (predicts == 1))
+    true_negative = count_bool((targets == 0) & (predicts == 0))
+
+    sensitivity = true_positive / positive if positive > 0 else 1.0
+    specificity = true_negative / negative if negative > 0 else 1.0
+
+    return torch.tensor([sensitivity, specificity])
+
+
+single_sensitivity_specificity = whole_accumulated(single_batch_sensitivity_specificity)
+
+
+def batch_sensitivity_specificity(predicts, targets, net=None):
+    predict_values = predicts.detach().max(1)
+    target_values = targets.detach().max(1)
+    return single_batch_sensitivity_specificity(predict_values, target_values)
+
+
+sensitivity_specificity = whole_accumulated(batch_sensitivity_specificity)
+
+def _sensitivity_specificity_legacy(net, data_loader):
     subgroups = [[1], [0]] # here assume the 0 label is negative, 1 label is positive
     results = []
     for group in subgroups:
@@ -355,7 +405,6 @@ def sensitivity_specificity(net, data_loader):
         results.append(correct_count / total_count)
 
     return torch.tensor(results)
-
 
 def auc_metric(index=1):
     def metric(net, data_loader):
@@ -409,33 +458,34 @@ def map_metric(metric, output_map=None, target_map=None):
     return new_metric
 
 
-def show_roc(net, data_loader, index=1, show=True):
-    """Show and returns the AOC, false positive, true positive
-
-    index is the index of positive prediction
-    """
-    originally_training = net.training
-    net.eval()
-
+def get_accumulated_pred_target(net, data_loader):
     predicts = []
     targets = []
     for batch in data_loader:
         inpt, target = batch
 
         predict = net(inpt)
-        
+
         predicts.append(predict)
         targets.append(target)
 
     total_predicts = torch.cat(predicts).detach()
     total_targets = torch.cat(targets).detach()
 
+    return total_predicts, total_targets
+
+
+def show_roc(net, data_loader, index=1, show=True):
+    """Show and returns the AOC, false positive, true positive
+
+    index is the index of positive prediction
+    """
+
+    total_predicts, total_targets = get_accumulated_pred_target(net, data_loader)
+
     false_positive, true_positive, _ = sklearn.metrics.roc_curve(total_targets[:, index], total_predicts[:, index])
     if show:
         plt.plot(false_positive, true_positive)
-
-    if originally_training:
-        net.train()
 
     return sklearn.metrics.roc_auc_score(total_targets[:, index], total_predicts[:, index]), false_positive, true_positive
 
