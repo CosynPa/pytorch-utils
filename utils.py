@@ -387,6 +387,9 @@ class OutputMapNet(nn.Module):
         self.net = net
         self.func = func
 
+        # Make the training state consistent
+        self.train(mode=net.training)
+
     def forward(self, x):
         return self.func(self.net.forward(x))
 
