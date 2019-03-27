@@ -121,8 +121,41 @@ def mul_info(matrix, bins):
     
     return hx - hxy
 
+
+def oscillatory_lr(start, end, period, start_decay, end_decay):
+    assert start_decay > 0 and end_decay > 0
+    def lr_updater(epoch):
+        quotient, remainder = divmod(epoch, period)
+
+        period_start = start / start_decay ** quotient
+        period_end = end / end_decay ** quotient
+
+        return period_start + (remainder / period) * (period_end - period_start)
+
+    return lr_updater
+
+
+def cyclic_lr(max_lr, base_lr, mid, period, max_decay, base_decay):
+    assert max_decay > 0 and base_decay > 0
+
+    def lr_updater(epoch):
+        quotient, remainder = divmod(epoch, period)
+
+        period_max = max_lr / max_decay ** quotient
+        period_base = base_lr / base_decay ** quotient
+
+        if remainder <= mid:
+            return period_base + (remainder / mid) * (period_max - period_base)
+        else:
+            assert period - mid != 0  # This is ensured because mid < remainder < period
+            return period_max + (remainder - mid) / (period - mid) * (period_base - period_max)
+
+    return lr_updater
+
+
 def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_data_loader=None, test_data_loader=None,
           custom_optimize_step=None,
+          lr_updater=None,
           batch_update_callback=None, epoch_update_callback=None,
           print_results=True):
     """Train the net
@@ -151,6 +184,10 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
         print_or_silent('epoch ', i)
         print_or_silent('')
         running_loss = 0.0
+
+        if lr_updater is not None:
+            optimizer.lr = lr_updater(epoch)
+
         for j, batch in enumerate(train_data_loader):
             inpt, target = batch
                         
