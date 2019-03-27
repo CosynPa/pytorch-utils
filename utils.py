@@ -8,6 +8,8 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from matplotlib import pyplot as plt
+import plotly
+import plotly.graph_objs as go
 import matplotlib as mpl
 import sklearn.metrics
 
@@ -487,7 +489,8 @@ def show_roc(net, data_loader, index=1, show=True):
     if show:
         plt.plot(false_positive, true_positive)
 
-    return sklearn.metrics.roc_auc_score(total_targets[:, index], total_predicts[:, index]), false_positive, true_positive
+    return sklearn.metrics.auc(false_positive, true_positive), false_positive, true_positive
+
 
 def linear_models(sequence):
     return [model for model in sequence if isinstance(model, nn.Linear)]
@@ -569,3 +572,19 @@ class MajorityVote(nn.Module):
         return votes
 
 
+def fig_quantile_statistic(weights, names, quantile):
+    num_features = weights[0].size()[1]
+    assert num_features == len(names), "The number of names should equal to the number of input"
+    all_ratio = torch.zeros(len(weights), num_features)
+    for i, weight in enumerate(weights):
+        abs_weight = weight.data.abs()
+
+        weight_mean = abs_weight.mean()
+        weight_std = abs_weight.std()
+
+        ratio = (abs_weight > weight_mean + quantile * weight_std).float().mean(dim=0)
+        all_ratio[i] = ratio
+
+    error = all_ratio.std(dim=0).tolist() if all_ratio.size()[0] >= 2 else None
+
+    return go.FigureWidget([go.Bar(x=all_ratio.mean(dim=0).tolist(), error_x=error, y=names, orientation = 'h')]), all_ratio
