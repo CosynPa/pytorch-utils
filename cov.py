@@ -9,8 +9,8 @@ def cov(x, y, bias=False):
     """
     assert x.ndim > 0 and y.ndim > 0 and x.shape[0] == y.shape[0], \
         str.format("The first dimension of x and y should match, got {} and {}", x.shape, y.shape)
-    x -= x.mean(axis=0)
-    y -= y.mean(axis=0)
+    x = x - x.mean(axis=0)
+    y = y - y.mean(axis=0)
 
     x_expanded_shape = tuple(list(x.shape) + [1] * (y.ndim - 1))
     x_expanded = x.reshape(x_expanded_shape)
