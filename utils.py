@@ -417,8 +417,8 @@ single_sensitivity_specificity = whole_accumulated(single_batch_sensitivity_spec
 
 
 def batch_sensitivity_specificity(predicts, targets, net=None):
-    predict_values = predicts.detach().max(1)
-    target_values = targets.detach().max(1)
+    _, predict_values = predicts.detach().max(1)
+    _, target_values = targets.detach().max(1)
     return single_batch_sensitivity_specificity(predict_values, target_values)
 
 
