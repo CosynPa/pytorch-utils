@@ -609,6 +609,30 @@ class MajorityVote(nn.Module):
         return votes
 
 
+class DenseLinear(nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.linear = nn.Linear(in_features, out_features)
+
+    def forward(self, x):
+        return torch.cat((self.linear(x), x), dim=1)
+
+
+class DenseLinearBlock(nn.Module):
+    def __init__(self, in_features, out_features, dropout=0.5):
+        super().__init__()
+
+        self.seq = nn.Sequential(
+            nn.Dropout(dropout),
+            DenseLinear(in_features, out_features),
+            nn.BatchNorm1d(in_features + out_features),
+            nn.ReLU(),
+        )
+
+    def forward(self, x):
+        return self.seq(x)
+
+
 def fig_quantile_statistic(weights, names, quantile):
     num_features = weights[0].size()[1]
     assert num_features == len(names), "The number of names should equal to the number of input"
