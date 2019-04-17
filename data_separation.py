@@ -1,10 +1,12 @@
 import random
 import itertools
+from typing import List, Tuple
 
 import torch
 
 
-def label_numbers_in_separation(separation, ordered_label_numbers):
+def label_numbers_in_separation(separation, ordered_label_numbers) -> List[List[int]]:
+    """Result[i, j] is how many items of label j there are in separation i"""
     assert sum(separation) == sum(ordered_label_numbers)
     
     total = sum(ordered_label_numbers)
@@ -46,12 +48,12 @@ def label_numbers_in_separation(separation, ordered_label_numbers):
     return sample_number_matrix
 
 
-def count_labels(labels):
+def count_labels(labels: torch.Tensor) -> Tuple[List[int], List[int], List[List[int]]]:
     """
     Return values:
         ordered_label_types: the label values for example [0, 1] for binary classification
         ordered_label_numbers: how many number of samples each label has
-        indices_groups_by_label: which indices have the label
+        indices_groups_by_label: which indices each label has
     """
     _, numbers = labels.max(dim=1)
     label_types = set(numbers.tolist())
@@ -68,13 +70,14 @@ def count_labels(labels):
 
 
 def balanced_index_separation(labels, separation):
-    """
+    """Separate the labels
+
     separation is the array of numbers of the size of each data set.
     For example [1560, 300, 200] means you want 3 subsets containing 1560, 300, 200 samples respectively.
     The sum of separation should be the same as the sample size of the labels.
     """
     ordered_label_types, ordered_label_numbers, indices_groups_by_label = count_labels(labels)
-    label_numbers_in_sep = label_numbers_in_separation(separation, ordered_label_numbers)
+    label_numbers_in_sep: List[List[int]] = label_numbers_in_separation(separation, ordered_label_numbers)
     
     label_range_starts_in_sep = torch.zeros_like(label_numbers_in_sep)
     label_range_stops_in_sep = torch.zeros_like(label_numbers_in_sep)
@@ -83,14 +86,19 @@ def balanced_index_separation(labels, separation):
         if i > 0:
             label_range_starts_in_sep[i] = label_numbers_in_sep[0:i].sum(dim=0)
         label_range_stops_in_sep[i] = label_numbers_in_sep[0:i + 1].sum(dim=0)
-        
+
+    for group_indices in indices_groups_by_label:
+        random.shuffle(group_indices)
+
     indices_in_sep = [[indices_groups_by_label[j][label_range_starts_in_sep[i, j]:label_range_stops_in_sep[i, j]]
                        for j in range(len(ordered_label_types))]
                       for i in range(len(separation))]
     
     indices = [sum(indices_in_sep[i], []) for i in range(len(separation))]
-    for i in range(len(indices)):
-        random.shuffle(indices[i])
+
+    for subindices in indices:
+        random.shuffle(subindices)
+
     return indices
 
 def split_by_ratios(total_number, ratios):
