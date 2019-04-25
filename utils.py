@@ -46,6 +46,22 @@ def l1_updated_(tensor, lr):
     
     return tensor.copy_(torch.where(tensor.abs() < lr, torch.zeros_like(tensor), tensor - tensor.sign() * lr))
 
+
+def heatmap_of_matrix(matrix, max_value=None):
+    feature = matrix.detach()
+
+    maximum = feature.max().item()
+    minimum = feature.min().item()
+
+    if max_value is None:
+        absolute = max(abs(maximum), abs(minimum))
+    else:
+        assert max_value > 0
+        absolute = max_value
+
+    return go.FigureWidget([go.Heatmap(z=feature.cpu().numpy().T, zmax=absolute, zmin=-absolute, colorscale="Picnic")])
+
+
 def image_of_matrix(matrix, max_value=None):
     feature = matrix.detach()
         
