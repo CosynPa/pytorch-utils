@@ -101,7 +101,8 @@ def balanced_index_separation(labels, separation):
 
     return indices
 
-def split_by_ratios(total_number, ratios):
+
+def split_by_ratios(total_number: int, ratios: List[float]) -> List[int]:
     assert abs(sum(ratios) - 1) < 1e-5
 
     accumulated_ratios = list(itertools.accumulate(ratios))
