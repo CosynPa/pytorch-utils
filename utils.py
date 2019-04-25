@@ -684,6 +684,12 @@ def fig_quantile_statistic(weights, names, quantile):
         ratio = (abs_weight > weight_mean + quantile * weight_std).float().mean(dim=0)
         all_ratio[i] = ratio
 
-    error = all_ratio.std(dim=0).tolist() if all_ratio.size()[0] >= 2 else None
+    if all_ratio.size()[0] >= 2:
+        error = dict(
+            type="data",
+            array=all_ratio.std(dim=0).tolist()
+        )
+    else:
+        error = None
 
     return go.FigureWidget([go.Bar(x=all_ratio.mean(dim=0).tolist(), error_x=error, y=names, orientation = 'h')]), all_ratio
