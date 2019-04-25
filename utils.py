@@ -267,11 +267,13 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
     else:
         return make_tensor_history(history)
 
-def make_tensor_history(epoch_history):
-    def flatten_metrics(metrics: List[torch.Tensor]) -> torch.Tensor:
-        """Makes a single Tensor that is the cat of all metrics"""
-        return torch.cat([a_metric.view(-1).detach() for a_metric in metrics])
 
+def flatten_metrics(metrics: List[torch.Tensor]) -> torch.Tensor:
+    """Makes a single Tensor that is the cat of all metrics"""
+    return torch.cat([a_metric.view(-1).detach() for a_metric in metrics])
+
+
+def make_tensor_history(epoch_history):
     def stack_between_epochs(one_category_metrics: List[List[torch.Tensor]]):
         return torch.stack([flatten_metrics(metrics) for metrics in one_category_metrics])
 
@@ -329,6 +331,21 @@ def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, pri
             net.train()
 
     return results
+
+
+def validate_nets(nets, loaders, metrics) -> torch.Tensor:
+    """Validate the nets with the corresponding loaders"""
+    assert len(nets) == len(loaders)
+
+    results = []
+    for i in range(len(nets)):
+        net = nets[i]
+        loader = loaders[i]
+
+        results.append(flatten_metrics(validate(net, loader, metrics, print_results=False)))
+
+    return torch.stack(results, dim=0)
+
 
 def batch_accumulate(batch_average=True):
     """Transform a function of the form of (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> metric: Tensor
@@ -591,6 +608,7 @@ class SimpleLoader:
         
         return SimpleLoaderIter(self.data + noise_tensor if self.noise !=0 else self.data,
                                  self.labels, self.batch_size)
+
 
 class IterableOperator:
     def __init__(self, iterator_constructor):
