@@ -19,6 +19,10 @@ def set_defaut_device():
     else:
         torch.set_default_tensor_type(torch.FloatTensor)
 
+
+set_defaut_device()
+
+
 def one_hot_encode(labels, number_cases):
     index = labels.unsqueeze(1)
     one_hot = torch.Tensor(len(labels), number_cases).zero_()
