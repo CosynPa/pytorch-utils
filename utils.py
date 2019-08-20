@@ -13,6 +13,7 @@ import plotly.graph_objs as go
 import matplotlib as mpl
 import sklearn.metrics
 
+
 def set_defaut_device():
     if torch.cuda.is_available():
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -25,9 +26,10 @@ set_defaut_device()
 
 def one_hot_encode(labels, number_cases):
     index = labels.unsqueeze(1)
-    one_hot = torch.Tensor(len(labels), number_cases).zero_()
+    one_hot = torch.zeros(len(labels), number_cases)
     one_hot.scatter_(1, index, 1)
     return one_hot
+
 
 def l1loss(net, factor):
     acc_loss = 0
@@ -36,10 +38,12 @@ def l1loss(net, factor):
 
     return factor * acc_loss
 
+
 def constrain_max_norm_(tensor, norm, dim=1):
     norm_ratio = tensor.norm(p=2, dim=dim, keepdim=True) / norm
     norm_coeff = torch.where(norm_ratio > 1, norm_ratio, torch.ones_like(norm_ratio))
     tensor /= norm_coeff
+
     
 def l1_updated_(tensor, lr):
     assert lr >= 0
@@ -82,21 +86,26 @@ def image_of_matrix(matrix, max_value=None):
             x = min(1.0, -weight / absolute)
             return mpl.colors.hsv_to_rgb(np.array([0.9, x, 1]))
 
-    return np.vectorize(weight_to_rgb, signature='()->(m)')(feature.cpu().numpy() if feature.is_cuda else feature.cpu().numpy())
+    return np.vectorize(weight_to_rgb, signature='()->(m)')(
+        feature.cpu().numpy() if feature.is_cuda else feature.cpu().numpy()
+    )
+
 
 def show_matrixes(tensor, max_value=None):
     length = len(tensor)
     plt.figure(figsize=(15 * 2, 15 * math.ceil(length / 2)))
     
     for i in range(length):
-        plt.subplot(math.ceil(length / 2), 2 , i + 1)
+        plt.subplot(math.ceil(length / 2), 2, i + 1)
         
-        plt.imshow(image_of_matrix(tensor[i]))
+        plt.imshow(image_of_matrix(tensor[i], max_value))
+
         
 def show_one_matrix(matrix, size=(8, 8), max_value=None):
     plt.figure(figsize=size)
     plt.imshow(image_of_matrix(matrix, max_value))
-                              
+
+
 def sparse_init_(matrix, ratio):
     row, column = matrix.size()
     for i in range(row):
@@ -107,7 +116,8 @@ def sparse_init_(matrix, ratio):
         
         matrix.data[i] = rand_weight * filling_position.float()
     return matrix
-               
+
+
 def mul_info(matrix, bins):
     def range_of_bins(total, bins):
         step = total / bins
@@ -125,7 +135,8 @@ def mul_info(matrix, bins):
     xs = sorted(list(matrix[:, 0]))
     ys = list(set(matrix[:, 1]))
     
-    groups = [(xs[start], (xs[end] if end < len(matrix) else xs[end - 1] + 1) ) for (start, end) in range_of_bins(len(matrix), bins)]
+    groups = [(xs[start], (xs[end] if end < len(matrix) else xs[end - 1] + 1) )
+              for (start, end) in range_of_bins(len(matrix), bins)]
     
     # H(X)
     hx = entropy(matrix[:, 0], groups)
@@ -144,6 +155,7 @@ def mul_info(matrix, bins):
 
 def oscillatory_lr(start, end, period, start_decay, end_decay):
     assert start_decay > 0 and end_decay > 0
+
     def lr_updater(epoch):
         quotient, remainder = divmod(epoch, period)
 
@@ -203,7 +215,6 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
     for i in range(epoch):
         print_or_silent('epoch ', i)
         print_or_silent('')
-        running_loss = 0.0
 
         if lr_updater is not None:
             optimizer.lr = lr_updater(epoch)
@@ -249,7 +260,8 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
         if test_data_loader is not None:
             print_or_silent('')
             print_or_silent('test:')
-            metric_values = validate(net, test_data_loader, metrics, eval_net=True, show_test_mark=True, print_results=print_results)
+            metric_values = validate(net, test_data_loader, metrics, eval_net=True, show_test_mark=True,
+                                     print_results=print_results)
             test_metrics.append(metric_values)
         
         print_or_silent('--')        
@@ -263,7 +275,7 @@ def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_da
         history.append(test_metrics)
 
     if len(batch_metrics) > 0:
-        return (make_tensor_history(history), torch.stack(batch_metrics))
+        return make_tensor_history(history), torch.stack(batch_metrics)
     else:
         return make_tensor_history(history)
 
@@ -283,6 +295,7 @@ def make_tensor_history(epoch_history):
     # Construct a tensor of size (category, epoch, metric),
     # where category means training, validation, test
     return stack_between_categories(epoch_history)
+
 
 def show_training_history(history):
     def show_one_type(tensor_history):
@@ -304,6 +317,7 @@ def show_training_history(history):
     else:
         tensor_epoch_history = history
         show_one_type(tensor_epoch_history)
+
 
 def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, print_results=True):
     def print_or_silent(*args):
@@ -428,9 +442,11 @@ def cohen_kappa(net, data_loader):
     kappa = sklearn.metrics.cohen_kappa_score(all_predicts.cpu().numpy(), all_targets.cpu().numpy())
     return torch.tensor(kappa)
 
+
 # Use this if you don't need any metric
 def zero_metric(net, data_loader):
     return torch.tensor(0.0)
+
 
 def count_bool(tensor: torch.ByteTensor) -> float:
     return tensor.float().sum().item()
@@ -461,8 +477,9 @@ def batch_sensitivity_specificity(predicts, targets, net=None):
 
 sensitivity_specificity = whole_accumulated(batch_sensitivity_specificity)
 
+
 def _sensitivity_specificity_legacy(net, data_loader):
-    subgroups = [[1], [0]] # here assume the 0 label is negative, 1 label is positive
+    subgroups = [[1], [0]]  # here assume the 0 label is negative, 1 label is positive
     results = []
     for group in subgroups:
         correct_count = 0
@@ -477,10 +494,11 @@ def _sensitivity_specificity_legacy(net, data_loader):
             for i in range(inpt.shape[0]):
                 if target_values[i] in group:
                     correct_count += 1 if predict[i] == target_values[i] else 0
-                    total_count +=1
+                    total_count += 1
         results.append(correct_count / total_count)
 
     return torch.tensor(results)
+
 
 def auc_metric(index=1):
     def metric(net, data_loader):
@@ -569,6 +587,7 @@ def show_roc(net, data_loader, index=1, show=True):
 def linear_models(sequence):
     return [model for model in sequence if isinstance(model, nn.Linear)]
 
+
 class SimpleLoaderIter:
     def __init__(self, data, labels, batch_size):
         self.data = data
@@ -593,7 +612,7 @@ class SimpleLoader:
         self.labels = labels            
         self.batch_size = batch_size
         self.noise = noise
-        self.shuffle=shuffle
+        self.shuffle = shuffle
         
     def __iter__(self):
         if self.shuffle:
@@ -607,7 +626,7 @@ class SimpleLoader:
             noise_tensor = torch.randn_like(self.data) * self.noise
         
         return SimpleLoaderIter(self.data + noise_tensor if self.noise !=0 else self.data,
-                                 self.labels, self.batch_size)
+                                self.labels, self.batch_size)
 
 
 class IterableOperator:
@@ -618,8 +637,10 @@ class IterableOperator:
         # Create a brand new iterator
         return self.iterator_constructor()
 
+
 def map_iterable(f, iterable):
-    return IterableOperator(lambda : map(f, iterable))
+    return IterableOperator(lambda: map(f, iterable))
+
 
 class AverageNet(nn.Module):
     def __init__(self, nets):
@@ -630,6 +651,7 @@ class AverageNet(nn.Module):
         
     def forward(self, x):
         return sum(a_net(x) for a_net in self.nets) / len(self.nets)
+
 
 class MajorityVote(nn.Module):
     def __init__(self, nets):
@@ -692,4 +714,5 @@ def fig_quantile_statistic(weights, names, quantile):
     else:
         error = None
 
-    return go.FigureWidget([go.Bar(x=all_ratio.mean(dim=0).tolist(), error_x=error, y=names, orientation = 'h')]), all_ratio
+    return go.FigureWidget([go.Bar(x=all_ratio.mean(dim=0).tolist(), error_x=error, y=names, orientation = 'h')]),\
+        all_ratio
