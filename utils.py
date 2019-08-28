@@ -1,12 +1,14 @@
 import math
 from functools import wraps
-from typing import List, Tuple
+from typing import List, Callable, Optional, Any
 import random
+from dataclasses import dataclass, field
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
+import torch.utils.data
 from matplotlib import pyplot as plt
 import plotly
 import plotly.graph_objs as go
@@ -185,99 +187,140 @@ def cyclic_lr(max_lr, base_lr, mid, period, max_decay, base_decay):
     return lr_updater
 
 
-def train(net, epoch, optimizer, loss, metrics, train_data_loader, validation_data_loader=None, test_data_loader=None,
-          custom_optimize_step=None,
-          lr_updater=None,
-          batch_update_callback=None, epoch_update_callback=None,
-          print_results=True):
-    """Train the net
-    
+@dataclass
+class TrainingHistory:
+    """A history tensor has size  (category, epoch, metric)"""
+
+    epochs: torch.Tensor
+    batches: Optional[torch.Tensor] = None
+
+    def show(self):
+        def show_one_type(tensor_history):
+            """tensor_history has size  (category, epoch, metric)"""
+            for metric_index in range(tensor_history.size()[2]):
+                epochs = tensor_history.size()[1]
+
+                for category_index in range(tensor_history.size()[0]):
+                    plt.plot(range(epochs), tensor_history[category_index, :, metric_index].cpu().numpy())
+                plt.show()
+
+        show_one_type(self.epochs)
+
+        if self.batches is not None:
+            show_one_type(self.batches)
+
+
+@dataclass
+class Trainer:
+    """Trainer of a net
+
     loss: (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> Tensor
     a metric: (net, data_loader) -> Tensor
     custom_optimize_step has parameter type (net, inpt, target, epoch, iteration)
     other callbacks have parameter types (net, epoch, iteration)
     batch_update_callback can return a tensor
-
-    Return value:
-    A tensor of size (category, epoch, metric)
     """
-    def print_or_silent(*args):
-        if print_results:
-            print(*args)
 
-    training_metrics = []
-    validation_metrics = []
-    test_metrics = []
+    net: nn.Module
+    epoch: int
+    optimizer: torch.optim.Optimizer
+    loss: Callable
+    metrics: List[Callable[[nn.Module, torch.utils.data.DataLoader], torch.Tensor]]
+    train_data_loader: torch.utils.data.DataLoader
+    validation_data_loader: Optional[torch.utils.data.DataLoader] = None
+    test_data_loader: Optional[torch.utils.data.DataLoader] = None
+    custom_optimize_step: Optional[Callable[[nn.Module, Any, Any, int, int], None]] = None
+    lr_updater: Optional[Callable[[int], None]] = None
+    batch_update_callback: Optional[Callable[[nn.Module, int, int], Optional[torch.Tensor]]] = None
+    epoch_update_callback: Optional[Callable[[nn.Module, int, int], None]] = None
+    print_results: bool = True
 
-    batch_metrics = []
-    
-    iteration_count = 0
-    for i in range(epoch):
-        print_or_silent('epoch ', i)
-        print_or_silent('')
+    history: [TrainingHistory] = field(init=False, default_factory=list)
 
-        if lr_updater is not None:
-            optimizer.lr = lr_updater(epoch)
+    def train(self):
+        def print_or_silent(*args):
+            if self.print_results:
+                print(*args)
 
-        for j, batch in enumerate(train_data_loader):
-            inpt, target = batch
-                        
-            if custom_optimize_step is None:
-                optimizer.zero_grad()
-                outp = net(inpt)
-                
-                losses = loss(outp, target, net)
-                loss_value = sum(losses) if isinstance(losses, list) else losses
-                loss_value.backward()
+        training_metrics = []
+        validation_metrics = []
+        test_metrics = []
 
-                optimizer.step()
-            else:
-                custom_optimize_step(net, inpt, target, i, iteration_count)
-                    
-            if batch_update_callback is not None:
-                t = batch_update_callback(net, i, iteration_count)
-                if t is not None:
-                    if len(t.size()) == 0:
-                        batch_metrics.append(torch.tensor([t.item()]))
-                    else:
-                        batch_metrics.append(t)
-                            
-            iteration_count += 1
+        batch_metrics = []
 
-        if epoch_update_callback is not None:
-            epoch_update_callback(net, i, iteration_count)
-        
-        print_or_silent('training:')
-        metric_values = validate(net, train_data_loader, metrics, eval_net=True, print_results=print_results)
-        training_metrics.append(metric_values)
-        
-        if validation_data_loader is not None:
+        iteration_count = 0
+        for i in range(self.epoch):
+            print_or_silent('epoch ', i)
             print_or_silent('')
-            print_or_silent('validation:')
-            metric_values = validate(net, validation_data_loader, metrics, eval_net=True, print_results=print_results)
-            validation_metrics.append(metric_values)
 
-        if test_data_loader is not None:
-            print_or_silent('')
-            print_or_silent('test:')
-            metric_values = validate(net, test_data_loader, metrics, eval_net=True, show_test_mark=True,
-                                     print_results=print_results)
-            test_metrics.append(metric_values)
-        
-        print_or_silent('--')        
+            if self.lr_updater is not None:
+                self.optimizer.lr = self.lr_updater(self.epoch)
 
-    history = [training_metrics]
+            for j, batch in enumerate(self.train_data_loader):
+                inpt, target = batch
 
-    if validation_data_loader is not None:
-        history.append(validation_metrics)
+                if self.custom_optimize_step is None:
+                    self.optimizer.zero_grad()
+                    outp = self.net(inpt)
 
-    if test_data_loader is not None:
-        history.append(test_metrics)
+                    losses = self.loss(outp, target, self.net)
+                    loss_value = sum(losses) if isinstance(losses, list) else losses
+                    loss_value.backward()
 
-    if len(batch_metrics) > 0:
-        return make_tensor_history(history), torch.stack(batch_metrics)
-    else:
-        return make_tensor_history(history)
+                    self.optimizer.step()
+                else:
+                    self.custom_optimize_step(self.net, inpt, target, i, iteration_count)
+
+                if self.batch_update_callback is not None:
+                    t = self.batch_update_callback(self.net, i, iteration_count)
+                    if t is not None:
+                        if len(t.size()) == 0:
+                            batch_metrics.append(torch.tensor([t.item()]))
+                        else:
+                            batch_metrics.append(t)
+
+                iteration_count += 1
+
+            if self.epoch_update_callback is not None:
+                self.epoch_update_callback(self.net, i, iteration_count)
+
+            print_or_silent('training:')
+            metric_values = validate(self.net, self.train_data_loader, self.metrics, eval_net=True,
+                                     print_results=self.print_results)
+            training_metrics.append(metric_values)
+
+            if self.validation_data_loader is not None:
+                print_or_silent('')
+                print_or_silent('validation:')
+                metric_values = validate(self.net, self.validation_data_loader, self.metrics, eval_net=True,
+                                         print_results=self.print_results)
+                validation_metrics.append(metric_values)
+
+            if self.test_data_loader is not None:
+                print_or_silent('')
+                print_or_silent('test:')
+                metric_values = validate(self.net, self.test_data_loader, self.metrics,
+                                         eval_net=True, show_test_mark=True,
+                                         print_results=self.print_results)
+                test_metrics.append(metric_values)
+
+            print_or_silent('--')
+
+        history = [training_metrics]
+
+        if self.validation_data_loader is not None:
+            history.append(validation_metrics)
+
+        if self.test_data_loader is not None:
+            history.append(test_metrics)
+
+        history_obj: TrainingHistory
+        if len(batch_metrics) > 0:
+            history_obj = TrainingHistory(make_tensor_history(history), torch.stack(batch_metrics).unsqueeze(0))
+        else:
+            history_obj = TrainingHistory(make_tensor_history(history))
+
+        self.history.append(history_obj)
 
 
 def flatten_metrics(metrics: List[torch.Tensor]) -> torch.Tensor:
@@ -295,28 +338,6 @@ def make_tensor_history(epoch_history):
     # Construct a tensor of size (category, epoch, metric),
     # where category means training, validation, test
     return stack_between_categories(epoch_history)
-
-
-def show_training_history(history):
-    def show_one_type(tensor_history):
-        """tensor_history has size  (category, epoch, metric)"""
-        for metric_index in range(tensor_history.size()[2]):
-            epochs = tensor_history.size()[1]
-
-            for category_index in range(tensor_history.size()[0]):
-                plt.plot(range(epochs), tensor_history[category_index, :, metric_index].cpu().numpy())
-            plt.show()
-
-    if isinstance(history, tuple):
-        tensor_epoch_history, tensor_batch_history = history
-        # tensor_batch_history is a tensor of size (batch_index, value), add a category dimention
-        tensor_batch_history.unsqueeze_(0)
-
-        show_one_type(tensor_epoch_history)
-        show_one_type(tensor_batch_history)
-    else:
-        tensor_epoch_history = history
-        show_one_type(tensor_epoch_history)
 
 
 def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, print_results=True):
