@@ -642,6 +642,20 @@ def map_iterable(f, iterable):
     return IterableOperator(lambda: map(f, iterable))
 
 
+@dataclass
+class MapDataset(torch.utils.data.Dataset):
+    dataset: torch.utils.data.Dataset
+    target_map: Callable = lambda x: x
+    data_map: Callable = lambda x: x
+
+    def __len__(self):
+        return self.dataset.__len__()
+
+    def __getitem__(self, item):
+        data, targets = self.dataset.__getitem__(item)
+        return self.data_map(data), self.target_map(targets)
+
+
 class AverageNet(nn.Module):
     def __init__(self, nets):
         super().__init__()
