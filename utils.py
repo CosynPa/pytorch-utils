@@ -230,7 +230,7 @@ class Trainer:
     validation_data_loader: Optional[torch.utils.data.DataLoader] = None
     test_data_loader: Optional[torch.utils.data.DataLoader] = None
     custom_optimize_step: Optional[Callable[[nn.Module, Any, Any, int, int], None]] = None
-    lr_updater: Optional[Callable[[int], None]] = None
+    lr_scheduler: Optional[Any] = None  # a learning rate scheduler in torch.optim.lr_scheduler
     batch_update_callback: Optional[Callable[[nn.Module, int, int], Optional[torch.Tensor]]] = None
     epoch_update_callback: Optional[Callable[[nn.Module, int, int], None]] = None
     print_results: bool = True
@@ -252,9 +252,6 @@ class Trainer:
         for i in range(self.epoch):
             print_or_silent('epoch ', i)
             print_or_silent('')
-
-            if self.lr_updater is not None:
-                self.optimizer.lr = self.lr_updater(self.epoch)
 
             for j, batch in enumerate(self.train_data_loader):
                 inpt, target = batch
@@ -303,6 +300,9 @@ class Trainer:
                                          eval_net=True, show_test_mark=True,
                                          print_results=self.print_results)
                 test_metrics.append(metric_values)
+
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
 
             print_or_silent('--')
 
