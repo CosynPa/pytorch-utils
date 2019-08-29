@@ -1,20 +1,20 @@
 import math
-from functools import wraps
-from typing import List, Callable, Optional, Any
 import random
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
+from functools import wraps
+from typing import List, Callable, Optional, Any, Tuple
 
+import matplotlib as mpl
 import numpy as np
-import torch
-import torch.nn.functional as F
-import torch.nn as nn
-import torch.utils.data
-from matplotlib import pyplot as plt
 import plotly
 import plotly.graph_objects as go
-import matplotlib as mpl
 import sklearn.metrics
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.utils.data
+from matplotlib import pyplot as plt
 
 
 def set_defaut_device():
@@ -207,13 +207,14 @@ class TrainingHistory:
             else:
                 return dict()
 
-    epochs: torch.Tensor
+    training_loss: torch.Tensor  # size (epoch)
+    epochs: torch.Tensor  # size (category, epoch, metric)
     categories: List[Category]
-    batches: Optional[torch.Tensor] = None
+    batches: Optional[torch.Tensor] = None  # size (1, epoch, metric)
 
 
     def show(self, columns=2) -> go.Figure:
-        def one_type_traces(tensor_history, showing_legends: set) -> List[List[go.Scatter]]:
+        def one_type_traces(tensor_history, categories, showing_legends: set) -> List[List[go.Scatter]]:
             """plotly traces for the tensor history
 
             Traces for one metric is grouped togeter.
@@ -226,7 +227,7 @@ class TrainingHistory:
 
                 traces_for_a_metric: List[go.Scatter] = []
 
-                for category_index, category in zip(range(tensor_history.size()[0]), self.categories):
+                for category_index, category in zip(range(tensor_history.size()[0]), categories):
                     trace = go.Scatter(x=list(range(epochs)),
                                        y=tensor_history[category_index, :, metric_index].cpu().numpy(),
                                        name=category.value,
@@ -240,10 +241,14 @@ class TrainingHistory:
             return traces
 
         showing_legends: set = set()
-        traces: List[List[go.Scatter]] = one_type_traces(self.epochs, showing_legends)
+        traces: List[List[go.Scatter]] = one_type_traces(self.training_loss[None, :, None],
+                                                         [TrainingHistory.Category.TRAINING],
+                                                         showing_legends)
+
+        traces += one_type_traces(self.epochs, self.categories, showing_legends)
 
         if self.batches is not None:
-            traces += one_type_traces(self.batches, showing_legends)
+            traces += one_type_traces(self.batches, [TrainingHistory.Category.TRAINING], showing_legends)
 
         rows = math.ceil(len(traces) / columns)
         fig = go.Figure(plotly.subplots.make_subplots(rows=rows, cols=columns))
@@ -282,6 +287,8 @@ class Trainer:
     train_data_loader: torch.utils.data.DataLoader
     validation_data_loader: Optional[torch.utils.data.DataLoader] = None
     test_data_loader: Optional[torch.utils.data.DataLoader] = None
+    batch_average_training_loss: bool = True
+    validate_training: bool = False
     custom_optimize_step: Optional[Callable[[nn.Module, Any, Any, int, int], None]] = None
     lr_scheduler: Optional[Any] = None  # a learning rate scheduler in torch.optim.lr_scheduler
     batch_update_callback: Optional[Callable[[nn.Module, int, int], Optional[torch.Tensor]]] = None
@@ -298,6 +305,7 @@ class Trainer:
         training_metrics = []
         validation_metrics = []
         test_metrics = []
+        running_losses: List[float] = []
 
         batch_metrics = []
 
@@ -306,8 +314,12 @@ class Trainer:
             print_or_silent('epoch ', i)
             print_or_silent('')
 
+            # loss of each batch and the number of samples of each batch
+            batch_losses_counts: List[Tuple[float, int]] = []
+
             for j, batch in enumerate(self.train_data_loader):
                 inpt, target = batch
+                batch_size = len(inpt)
 
                 if self.custom_optimize_step is None:
                     self.optimizer.zero_grad()
@@ -316,6 +328,8 @@ class Trainer:
                     losses = self.loss(outp, target, self.net)
                     loss_value = sum(losses) if isinstance(losses, list) else losses
                     loss_value.backward()
+
+                    batch_losses_counts.append((loss_value.item(), batch_size))
 
                     self.optimizer.step()
                 else:
@@ -334,10 +348,31 @@ class Trainer:
             if self.epoch_update_callback is not None:
                 self.epoch_update_callback(self.net, i, iteration_count)
 
-            print_or_silent('training:')
-            metric_values = validate(self.net, self.train_data_loader, self.metrics, eval_net=True,
-                                     print_results=self.print_results)
-            training_metrics.append(metric_values)
+            if self.custom_optimize_step is None:
+                if self.batch_average_training_loss:
+                    total_loss = 0.0
+                    total_count = 0
+                    for loss, batch_size in batch_losses_counts:
+                        total_loss += loss * batch_size
+                        total_count += batch_size
+
+                    a_running_loss = total_loss / total_count
+                else:
+                    a_running_loss = sum(loss for loss, _ in batch_losses_counts)
+
+                print_or_silent('running loss:')
+                print_or_silent(a_running_loss)
+                running_losses.append(a_running_loss)
+            else:
+                # no running loss
+                pass
+
+            if self.validate_training:
+                print_or_silent('')
+                print_or_silent('training:')
+                metric_values = validate(self.net, self.train_data_loader, self.metrics, eval_net=True,
+                                         print_results=self.print_results)
+                training_metrics.append(metric_values)
 
             if self.validation_data_loader is not None:
                 print_or_silent('')
@@ -360,8 +395,12 @@ class Trainer:
             print_or_silent('--')
 
         # history[category][epoch][metric] is a loss tensor
-        history: List[List[List[torch.Tensor]]] = [training_metrics]
-        categories: List[TrainingHistory.Category] = [TrainingHistory.Category.TRAINING]
+        history: List[List[List[torch.Tensor]]] = []
+        categories: List[TrainingHistory.Category] = []
+
+        if self.validate_training:
+            history.append(training_metrics)
+            categories.append(TrainingHistory.Category.TRAINING)
 
         if self.validation_data_loader is not None:
             history.append(validation_metrics)
@@ -373,11 +412,13 @@ class Trainer:
 
         history_obj: TrainingHistory
         if len(batch_metrics) > 0:
-            history_obj = TrainingHistory(make_tensor_history(history),
+            history_obj = TrainingHistory(torch.tensor(running_losses),
+                                          make_tensor_history(history),
                                           categories,
                                           torch.stack(batch_metrics).unsqueeze(0))
         else:
-            history_obj = TrainingHistory(make_tensor_history(history),
+            history_obj = TrainingHistory(torch.tensor(running_losses),
+                                          make_tensor_history(history),
                                           categories)
 
         self.history.append(history_obj)
