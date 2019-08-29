@@ -359,7 +359,8 @@ class Trainer:
 
             print_or_silent('--')
 
-        history = [training_metrics]
+        # history[category][epoch][metric] is a loss tensor
+        history: List[List[List[torch.Tensor]]] = [training_metrics]
         categories: List[TrainingHistory.Category] = [TrainingHistory.Category.TRAINING]
 
         if self.validation_data_loader is not None:
@@ -387,11 +388,11 @@ def flatten_metrics(metrics: List[torch.Tensor]) -> torch.Tensor:
     return torch.cat([a_metric.view(-1).detach() for a_metric in metrics])
 
 
-def make_tensor_history(epoch_history):
+def make_tensor_history(epoch_history: List[List[List[torch.Tensor]]]):
     def stack_between_epochs(one_category_metrics: List[List[torch.Tensor]]):
         return torch.stack([flatten_metrics(metrics) for metrics in one_category_metrics])
 
-    def stack_between_categories(epoch_history):
+    def stack_between_categories(epoch_history: List[List[List[torch.Tensor]]]):
         return torch.stack([stack_between_epochs(one_category_metrics) for one_category_metrics in epoch_history])
 
     # Construct a tensor of size (category, epoch, metric),
@@ -399,7 +400,8 @@ def make_tensor_history(epoch_history):
     return stack_between_categories(epoch_history)
 
 
-def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, print_results=True):
+def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, print_results=True) -> List[torch.Tensor]:
+    """Returns a list of tensors. The number of tensors is the same as the number of metrics"""
     def print_or_silent(*args):
         if print_results:
             print(*args)
