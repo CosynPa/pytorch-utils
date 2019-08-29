@@ -3,6 +3,7 @@ from functools import wraps
 from typing import List, Callable, Optional, Any
 import random
 from dataclasses import dataclass, field
+from enum import Enum, auto
 
 import numpy as np
 import torch
@@ -11,7 +12,7 @@ import torch.nn as nn
 import torch.utils.data
 from matplotlib import pyplot as plt
 import plotly
-import plotly.graph_objs as go
+import plotly.graph_objects as go
 import matplotlib as mpl
 import sklearn.metrics
 
@@ -191,23 +192,61 @@ def cyclic_lr(max_lr, base_lr, mid, period, max_decay, base_decay):
 class TrainingHistory:
     """A history tensor has size  (category, epoch, metric)"""
 
+    class Category(Enum):
+        TRAINING = "Training"
+        VALIDATION = "Validation"
+        TEST = "Test"
+
     epochs: torch.Tensor
+    categories: List[Category]
     batches: Optional[torch.Tensor] = None
 
-    def show(self):
-        def show_one_type(tensor_history):
-            """tensor_history has size  (category, epoch, metric)"""
+
+    def show(self, columns=2) -> go.FigureWidget:
+        def one_type_traces(tensor_history) -> List[List[go.Scatter]]:
+            """plotly traces for the tensor history
+
+            Traces for one metric is grouped togeter.
+            tensor_history has size  (category, epoch, metric)
+            """
+
+            traces: List[List[go.Scatter]] = []
             for metric_index in range(tensor_history.size()[2]):
                 epochs = tensor_history.size()[1]
 
-                for category_index in range(tensor_history.size()[0]):
-                    plt.plot(range(epochs), tensor_history[category_index, :, metric_index].cpu().numpy())
-                plt.show()
+                traces_for_a_metric: List[go.Scatter] = []
 
-        show_one_type(self.epochs)
+                for category_index, category in zip(range(tensor_history.size()[0]), self.categories):
+                    trace = go.Scatter(x=list(range(epochs)),
+                                       y=tensor_history[category_index, :, metric_index].cpu().numpy(),
+                                       name=category.value)
+                    traces_for_a_metric.append(trace)
+
+                traces.append(traces_for_a_metric)
+
+            return traces
+
+        traces: List[List[go.Scatter]] = one_type_traces(self.epochs)
 
         if self.batches is not None:
-            show_one_type(self.batches)
+            traces += one_type_traces(self.batches)
+
+        rows = math.ceil(len(traces) / columns)
+        fig = go.FigureWidget(plotly.subplots.make_subplots(rows=rows, cols=columns))
+        fig.layout.height = 250 * columns
+
+        current_row = 1
+        current_col = 1
+        for traces_for_a_metric in traces:
+            for trace in traces_for_a_metric:
+                fig.add_trace(trace, row=current_row, col=current_col)
+
+            current_col += 1
+            if current_col == columns + 1:
+                current_col = 1
+                current_row += 1
+
+        return fig
 
 
 @dataclass
@@ -307,18 +346,24 @@ class Trainer:
             print_or_silent('--')
 
         history = [training_metrics]
+        categories: List[TrainingHistory.Category] = [TrainingHistory.Category.TRAINING]
 
         if self.validation_data_loader is not None:
             history.append(validation_metrics)
+            categories.append(TrainingHistory.Category.VALIDATION)
 
         if self.test_data_loader is not None:
             history.append(test_metrics)
+            categories.append(TrainingHistory.Category.TEST)
 
         history_obj: TrainingHistory
         if len(batch_metrics) > 0:
-            history_obj = TrainingHistory(make_tensor_history(history), torch.stack(batch_metrics).unsqueeze(0))
+            history_obj = TrainingHistory(make_tensor_history(history),
+                                          categories,
+                                          torch.stack(batch_metrics).unsqueeze(0))
         else:
-            history_obj = TrainingHistory(make_tensor_history(history))
+            history_obj = TrainingHistory(make_tensor_history(history),
+                                          categories)
 
         self.history.append(history_obj)
 
