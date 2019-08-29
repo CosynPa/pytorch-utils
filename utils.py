@@ -197,13 +197,23 @@ class TrainingHistory:
         VALIDATION = "Validation"
         TEST = "Test"
 
+        def color_dict(self):
+            if self == TrainingHistory.Category.TRAINING:
+                return dict(color="red")
+            elif self == TrainingHistory.Category.VALIDATION:
+                return dict(color="blue")
+            elif self == TrainingHistory.Category.Test:
+                return dict(color="green")
+            else:
+                return dict()
+
     epochs: torch.Tensor
     categories: List[Category]
     batches: Optional[torch.Tensor] = None
 
 
-    def show(self, columns=2) -> go.FigureWidget:
-        def one_type_traces(tensor_history) -> List[List[go.Scatter]]:
+    def show(self, columns=2) -> go.Figure:
+        def one_type_traces(tensor_history, showing_legends: set) -> List[List[go.Scatter]]:
             """plotly traces for the tensor history
 
             Traces for one metric is grouped togeter.
@@ -219,20 +229,24 @@ class TrainingHistory:
                 for category_index, category in zip(range(tensor_history.size()[0]), self.categories):
                     trace = go.Scatter(x=list(range(epochs)),
                                        y=tensor_history[category_index, :, metric_index].cpu().numpy(),
-                                       name=category.value)
+                                       name=category.value,
+                                       line=category.color_dict(),
+                                       showlegend=category.value not in showing_legends)
                     traces_for_a_metric.append(trace)
+                    showing_legends.add(category.value)
 
                 traces.append(traces_for_a_metric)
 
             return traces
 
-        traces: List[List[go.Scatter]] = one_type_traces(self.epochs)
+        showing_legends: set = set()
+        traces: List[List[go.Scatter]] = one_type_traces(self.epochs, showing_legends)
 
         if self.batches is not None:
-            traces += one_type_traces(self.batches)
+            traces += one_type_traces(self.batches, showing_legends)
 
         rows = math.ceil(len(traces) / columns)
-        fig = go.FigureWidget(plotly.subplots.make_subplots(rows=rows, cols=columns))
+        fig = go.Figure(plotly.subplots.make_subplots(rows=rows, cols=columns))
         fig.layout.height = 250 * columns
 
         current_row = 1
