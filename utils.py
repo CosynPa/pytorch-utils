@@ -27,6 +27,9 @@ def set_defaut_device():
 set_defaut_device()
 
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
 def one_hot_encode(labels, number_cases):
     index = labels.unsqueeze(1)
     one_hot = torch.zeros(len(labels), number_cases)
