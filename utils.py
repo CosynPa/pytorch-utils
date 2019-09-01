@@ -489,7 +489,10 @@ def validate_nets(nets, loaders, metrics) -> torch.Tensor:
 
 def batch_accumulate(batch_average=True):
     """Transform a function of the form of (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> metric: Tensor
-     to the form of (net, data_loader) -> metric: Tensor"""
+     to the form of (net, data_loader) -> metric: Tensor.
+
+     This is typically used as a metric. The accumulated result can't be used to calculate the gradient.
+     """
     def transform(f):
         @wraps(f)
         def accumulating_f(net, data_loader):
@@ -501,7 +504,7 @@ def batch_accumulate(batch_average=True):
 
                 outp = net(inpt)
 
-                metric = f(outp, target, net)
+                metric = f(outp, target, net).detach()
                 
                 if batch_average:
                     acc += batch_size * metric
