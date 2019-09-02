@@ -210,7 +210,7 @@ class TrainingHistory:
             else:
                 return dict()
 
-    training_loss: Optional[torch.Tensor]  # size (epoch)
+    training_loss: Optional[torch.Tensor]  # size (epoch or batch)
     epochs: torch.Tensor  # size (category, epoch, metric)
     categories: List[Category]
     batches: Optional[torch.Tensor] = None  # size (1, epoch, metric)
@@ -293,6 +293,7 @@ class Trainer:
     train_data_loader: torch.utils.data.DataLoader
     validation_data_loader: Optional[torch.utils.data.DataLoader] = None
     test_data_loader: Optional[torch.utils.data.DataLoader] = None
+    per_batch_training_loss: bool = True
     batch_average_training_loss: bool = True
     validate_training: bool = False
     custom_optimize_step: Optional[Callable[[nn.Module, Any, Any, int, int], None]] = None
@@ -368,7 +369,11 @@ class Trainer:
 
                 print_or_silent('running loss:')
                 print_or_silent(a_running_loss)
-                running_losses.append(a_running_loss)
+
+                if self.per_batch_training_loss:
+                    running_losses += [loss for loss, _ in batch_losses_counts]
+                else:
+                    running_losses.append(a_running_loss)
             else:
                 running_losses = None
 
