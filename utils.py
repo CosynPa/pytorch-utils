@@ -210,7 +210,7 @@ class TrainingHistory:
             else:
                 return dict()
 
-    training_loss: torch.Tensor  # size (epoch)
+    training_loss: Optional[torch.Tensor]  # size (epoch)
     epochs: torch.Tensor  # size (category, epoch, metric)
     categories: List[Category]
     batches: Optional[torch.Tensor] = None  # size (1, epoch, metric)
@@ -220,7 +220,7 @@ class TrainingHistory:
         def one_type_traces(tensor_history, categories, showing_legends: set) -> List[List[go.Scatter]]:
             """plotly traces for the tensor history
 
-            Traces for one metric is grouped togeter.
+            Traces for one metric is grouped together.
             tensor_history has size  (category, epoch, metric)
             """
 
@@ -244,9 +244,12 @@ class TrainingHistory:
             return traces
 
         showing_legends: set = set()
-        traces: List[List[go.Scatter]] = one_type_traces(self.training_loss[None, :, None],
-                                                         [TrainingHistory.Category.TRAINING],
-                                                         showing_legends)
+
+        traces: List[List[go.Scatter]] = []
+        if self.training_loss is not None:
+            traces += one_type_traces(self.training_loss[None, :, None],
+                                      [TrainingHistory.Category.TRAINING],
+                                      showing_legends)
 
         traces += one_type_traces(self.epochs, self.categories, showing_legends)
 
@@ -308,7 +311,7 @@ class Trainer:
         training_metrics = []
         validation_metrics = []
         test_metrics = []
-        running_losses: List[float] = []
+        running_losses: Optional[List[float]] = []
 
         batch_metrics = []
 
@@ -367,8 +370,7 @@ class Trainer:
                 print_or_silent(a_running_loss)
                 running_losses.append(a_running_loss)
             else:
-                # no running loss
-                pass
+                running_losses = None
 
             if self.validate_training:
                 print_or_silent('')
