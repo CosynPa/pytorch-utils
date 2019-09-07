@@ -205,7 +205,7 @@ class TrainingHistory:
                 return dict(color="red")
             elif self == TrainingHistory.Category.VALIDATION:
                 return dict(color="blue")
-            elif self == TrainingHistory.Category.Test:
+            elif self == TrainingHistory.Category.TEST:
                 return dict(color="green")
             else:
                 return dict()
