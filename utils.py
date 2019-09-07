@@ -286,7 +286,6 @@ class Trainer:
     """
 
     net: nn.Module
-    epoch: int
     optimizer: torch.optim.Optimizer
     loss: Callable
     metrics: List[Callable[[nn.Module, torch.utils.data.DataLoader], torch.Tensor]]
@@ -304,7 +303,7 @@ class Trainer:
 
     history: [TrainingHistory] = field(init=False, default_factory=list)
 
-    def train(self):
+    def train(self, epoch: int):
         def print_or_silent(*args):
             if self.print_results:
                 print(*args)
@@ -317,7 +316,7 @@ class Trainer:
         batch_metrics = []
 
         iteration_count = 0
-        for i in range(self.epoch):
+        for i in range(epoch):
             print_or_silent('epoch ', i)
             print_or_silent('')
 
