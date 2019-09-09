@@ -403,7 +403,7 @@ class Trainer:
 
             print_or_silent('--')
 
-        # history[category][epoch][metric] is a loss tensor
+        # history[category][epoch][metric] is a metric tensor
         history: List[List[List[torch.Tensor]]] = []
         categories: List[TrainingHistory.Category] = []
 
@@ -439,14 +439,23 @@ def flatten_metrics(metrics: List[torch.Tensor]) -> torch.Tensor:
 
 
 def make_tensor_history(epoch_history: List[List[List[torch.Tensor]]]):
+    """Construct a tensor of size (category, epoch, metric)
+
+    Category means training, validation, test.
+
+    epoch_history[category][epoch][metric] is a metric tensor.
+
+    A metric tensor is typically a 0-dimensional tensor, but can also be more complex, the result is concatenated,
+    e.g. there are two metrics, one has size (2,), one has size (1, 3), the returned tensor will have size
+    (category, epoch, 5).
+    """
+
     def stack_between_epochs(one_category_metrics: List[List[torch.Tensor]]):
         return torch.stack([flatten_metrics(metrics) for metrics in one_category_metrics])
 
     def stack_between_categories(epoch_history: List[List[List[torch.Tensor]]]):
         return torch.stack([stack_between_epochs(one_category_metrics) for one_category_metrics in epoch_history])
 
-    # Construct a tensor of size (category, epoch, metric),
-    # where category means training, validation, test
     return stack_between_categories(epoch_history)
 
 
