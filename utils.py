@@ -311,7 +311,7 @@ class Trainer:
         training_metrics = []
         validation_metrics = []
         test_metrics = []
-        running_losses: Optional[List[float]] = []
+        running_losses: Optional[List[torch.Tensor]] = []
 
         batch_metrics = []
 
@@ -321,7 +321,7 @@ class Trainer:
             print_or_silent('')
 
             # loss of each batch and the number of samples of each batch
-            batch_losses_counts: List[Tuple[float, int]] = []
+            batch_losses_counts: List[Tuple[torch.Tensor, int]] = []
 
             for j, batch in enumerate(self.train_data_loader):
                 inpt, target = batch
@@ -332,10 +332,10 @@ class Trainer:
                     outp = self.net(inpt)
 
                     losses = self.loss(outp, target, self.net)
-                    loss_value = sum(losses) if isinstance(losses, list) else losses
+                    loss_value = sum(losses) if isinstance(losses, list) else losses  # loss_value has size []
                     loss_value.backward()
 
-                    batch_losses_counts.append((loss_value.item(), batch_size))
+                    batch_losses_counts.append((loss_value.detach(), batch_size))
 
                     self.optimizer.step()
                 else:
@@ -345,7 +345,7 @@ class Trainer:
                     t = self.batch_update_callback(self.net, i, iteration_count)
                     if t is not None:
                         if len(t.size()) == 0:
-                            batch_metrics.append(torch.tensor([t.item()]))
+                            batch_metrics.append(torch.tensor([t]))
                         else:
                             batch_metrics.append(t)
 
@@ -362,12 +362,12 @@ class Trainer:
                         total_loss += loss * batch_size
                         total_count += batch_size
 
-                    a_running_loss = total_loss / total_count
+                    a_running_loss: torch.Tensor = total_loss / total_count
                 else:
-                    a_running_loss = sum(loss for loss, _ in batch_losses_counts)
+                    a_running_loss: torch.Tensor = sum(loss for loss, _ in batch_losses_counts)
 
                 print_or_silent('running loss:')
-                print_or_silent(a_running_loss)
+                print_or_silent(a_running_loss.item())
 
                 if self.per_batch_training_loss:
                     running_losses += [loss for loss, _ in batch_losses_counts]
@@ -421,12 +421,12 @@ class Trainer:
 
         history_obj: TrainingHistory
         if len(batch_metrics) > 0:
-            history_obj = TrainingHistory(torch.tensor(running_losses),
+            history_obj = TrainingHistory(torch.stack(running_losses),
                                           make_tensor_history(history),
                                           categories,
                                           torch.stack(batch_metrics).unsqueeze(0))
         else:
-            history_obj = TrainingHistory(torch.tensor(running_losses),
+            history_obj = TrainingHistory(torch.stack(running_losses),
                                           make_tensor_history(history),
                                           categories)
 
