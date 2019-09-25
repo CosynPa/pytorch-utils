@@ -30,6 +30,12 @@ set_defaut_device()
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+def default_device() -> torch.device:
+    """Get the current default device"""
+    tensor = torch.Tensor([0])
+    return tensor.device
+
+
 def one_hot_encode(labels, number_cases):
     index = labels.unsqueeze(1)
     one_hot = torch.zeros(len(labels), number_cases)
