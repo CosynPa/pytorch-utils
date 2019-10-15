@@ -514,6 +514,8 @@ def batch_accumulate(batch_average=True):
 
      This is typically used as a metric. The accumulated result can't be used to calculate the gradient.
      """
+    assert isinstance(batch_average, bool)
+
     def transform(f):
         @wraps(f)
         def accumulating_f(net, data_loader):
