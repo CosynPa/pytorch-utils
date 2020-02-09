@@ -740,6 +740,74 @@ def linear_models(sequence):
     return [model for model in sequence if isinstance(model, nn.Linear)]
 
 
+def get_mean_std(loader: torch.utils.data.DataLoader, select_input: Callable, reduce_dims):
+    def numel_dim(tensor, dim: list) -> int:
+        number = 1
+        for a_dim in dim:
+            number *= tensor.size()[a_dim]
+        return number
+
+    def reduce(item, accumulated, reduce_dims):
+        if isinstance(item, list) or isinstance(item, tuple):
+            assert isinstance(reduce_dims, list) or isinstance(reduce_dims, tuple)
+            assert len(item) == len(reduce_dims)
+            assert accumulated is None or \
+                   ((isinstance(accumulated, list) or isinstance(accumulated, tuple)) and len(item) == len(accumulated))
+
+            total = []
+            for i, x in enumerate(item):
+                total.append(reduce(x, accumulated[i] if accumulated is not None else None, reduce_dims[i]))
+
+            return total
+        elif isinstance(item, torch.Tensor):
+            assert accumulated is None or isinstance(accumulated, dict)
+
+            # 0 dim is the batch dim, always reduce
+            reduce_list: list
+            if reduce_dims is None:
+                reduce_list = [0]
+            elif isinstance(reduce_dims, int):
+                reduce_list = [0, reduce_dims]
+            elif isinstance(reduce_dims, list):
+                reduce_list = [0] + reduce_dims
+            elif isinstance(reduce_dims, tuple):
+                reduce_list = [0] + list(reduce_dims)
+            else:
+                assert False, f"reduce_dims must be None or a list of ints or a tuple of ints, got {type(reduce_dims)}"
+
+            number: int = numel_dim(item, reduce_list)
+            s: torch.Tensor = item.sum(dim=reduce_list)
+            squared_sum: torch.Tensor = (item ** 2).sum(dim=reduce_list)
+
+            if accumulated is None:
+                return {"n": number, "sum": s, "squared_sum": squared_sum}
+            else:
+                accumulated["n"] += number
+                accumulated["sum"] += s
+                accumulated["squared_sum"] += squared_sum
+                return accumulated
+        else:
+            assert False, f"Unknown item type {type(item)}"
+
+    def get_result(accumulated):
+        if isinstance(accumulated, list):
+            return [get_result(item) for item in accumulated]
+        elif isinstance(accumulated, dict):
+            number = accumulated["n"]
+            mean: torch.Tensor = accumulated["sum"] / number
+            std: torch.Tensor = (accumulated["squared_sum"] - number * mean ** 2) / (number - 1)
+            return {"mean": mean, "std": std}
+        else:
+            assert False, f"Unknown type {type(accumulated)} of `accumulated`"
+
+    accumulated = None
+    for batch in loader:
+        inpt = select_input(batch)
+        accumulated = reduce(inpt, accumulated, reduce_dims)
+
+    return get_result(accumulated)
+
+
 class SimpleLoaderIter:
     def __init__(self, data, labels, batch_size):
         self.data = data
