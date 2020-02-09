@@ -221,7 +221,6 @@ class TrainingHistory:
     categories: List[Category]
     batches: Optional[torch.Tensor] = None  # size (1, epoch, metric)
 
-
     def show(self, columns=2) -> go.Figure:
         def one_type_traces(tensor_history, categories, showing_legends: set) -> List[List[go.Scatter]]:
             """plotly traces for the tensor history
@@ -278,6 +277,21 @@ class TrainingHistory:
                 current_row += 1
 
         return fig
+
+    @staticmethod
+    def merge(history_list: List["TrainingHistory"]) -> "TrainingHistory":
+        assert len(history_list) >= 1, "Cannot merge empty list"
+        return TrainingHistory(
+            training_loss=torch.cat([h.training_loss for h in history_list], dim=0)\
+            if history_list[0].training_loss is not None else None,
+
+            epochs=torch.cat([h.epochs for h in history_list], dim=1),
+
+            categories=history_list[0].categories,
+
+            batches=torch.cat([h.batches for h in history_list], dim=1)\
+            if history_list[0].batches is not None else None
+        )
 
 
 @dataclass
