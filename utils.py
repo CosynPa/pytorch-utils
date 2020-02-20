@@ -754,12 +754,15 @@ def linear_models(sequence):
     return [model for model in sequence if isinstance(model, nn.Linear)]
 
 
-def get_mean_std(loader: torch.utils.data.DataLoader, select_input: Callable, reduce_dims):
+def get_mean_std(loader: torch.utils.data.DataLoader, select_input: Callable, reduce_dims, allow_nan: bool = False):
     def numel_dim(tensor, dim: list) -> int:
         number = 1
         for a_dim in dim:
             number *= tensor.size()[a_dim]
         return number
+
+    def numel_except_nan(tensor, dim: list) -> torch.Tensor:
+        return (~torch.isnan(tensor)).float().sum(dim=dim)
 
     def reduce(item, accumulated, reduce_dims):
         if isinstance(item, list) or isinstance(item, tuple):
@@ -789,9 +792,18 @@ def get_mean_std(loader: torch.utils.data.DataLoader, select_input: Callable, re
             else:
                 assert False, f"reduce_dims must be None or a list of ints or a tuple of ints, got {type(reduce_dims)}"
 
-            number: int = numel_dim(item, reduce_list)
-            s: torch.Tensor = item.sum(dim=reduce_list)
-            squared_sum: torch.Tensor = (item ** 2).sum(dim=reduce_list)
+            if allow_nan:
+                number: torch.Tensor = numel_except_nan(item, reduce_list)
+
+                clone = item.clone()
+                clone[torch.isnan(clone)] = 0.0
+
+                s: torch.Tensor = clone.sum(dim=reduce_list)
+                squared_sum: torch.Tensor = (clone ** 2).sum(dim=reduce_list)
+            else:
+                number: int = numel_dim(item, reduce_list)
+                s: torch.Tensor = item.sum(dim=reduce_list)
+                squared_sum: torch.Tensor = (item ** 2).sum(dim=reduce_list)
 
             if accumulated is None:
                 return {"n": number, "sum": s, "squared_sum": squared_sum}
