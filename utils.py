@@ -809,7 +809,7 @@ def get_mean_std(loader: torch.utils.data.DataLoader, select_input: Callable, re
         elif isinstance(accumulated, dict):
             number = accumulated["n"]
             mean: torch.Tensor = accumulated["sum"] / number
-            std: torch.Tensor = (accumulated["squared_sum"] - number * mean ** 2) / (number - 1)
+            std: torch.Tensor = torch.sqrt((accumulated["squared_sum"] - number * mean ** 2) / (number - 1))
             return {"mean": mean, "std": std}
         else:
             assert False, f"Unknown type {type(accumulated)} of `accumulated`"
