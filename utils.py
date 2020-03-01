@@ -3,7 +3,7 @@ import random
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import wraps
-from typing import List, Callable, Optional, Any, Tuple
+from typing import List, Callable, Optional, Any, Tuple, Union, Dict
 
 import matplotlib as mpl
 import numpy as np
@@ -219,7 +219,8 @@ class TrainingHistory:
     training_loss: Optional[torch.Tensor]  # size (epoch or batch)
     epochs: torch.Tensor  # size (category, epoch, metric)
     categories: List[Category]
-    batches: Optional[torch.Tensor] = None  # size (1, epoch, metric)
+    batches: Optional[torch.Tensor] = None  # size (1, epoch, metric), per batch metric
+    metric_names: Optional[List[str]] = None
 
     def show(self, columns=2) -> go.Figure:
         def one_type_traces(tensor_history, categories, showing_legends: set) -> List[List[go.Scatter]]:
@@ -251,19 +252,25 @@ class TrainingHistory:
         showing_legends: set = set()
 
         traces: List[List[go.Scatter]] = []
+        titles: List[str] = []
         if self.training_loss is not None:
             traces += one_type_traces(self.training_loss[None, :, None],
                                       [TrainingHistory.Category.TRAINING],
                                       showing_legends)
+            titles.append("Training Loss")
 
         traces += one_type_traces(self.epochs, self.categories, showing_legends)
+        titles += self.metric_names or [""] * self.epochs.size()[2]
 
         if self.batches is not None:
             traces += one_type_traces(self.batches, [TrainingHistory.Category.TRAINING], showing_legends)
+            titles += ["Batch Metric"] * self.batches.size()[2]
+
+        assert len(traces) == len(titles), "Some calculation goes wrong"
 
         rows = math.ceil(len(traces) / columns)
-        fig = go.Figure(plotly.subplots.make_subplots(rows=rows, cols=columns))
-        fig.layout.height = 250 * columns
+        fig = go.Figure(plotly.subplots.make_subplots(rows=rows, cols=columns, subplot_titles=titles))
+        fig.layout.height = 350 * rows
 
         current_row = 1
         current_col = 1
@@ -290,7 +297,9 @@ class TrainingHistory:
             categories=history_list[0].categories,
 
             batches=torch.cat([h.batches for h in history_list], dim=1)\
-            if history_list[0].batches is not None else None
+            if history_list[0].batches is not None else None,
+
+            metric_names=history_list[0].metric_names
         )
 
 
@@ -299,7 +308,8 @@ class Trainer:
     """Trainer of a net
 
     loss: (outp: Tensor or [Tensor], target: Tensor or [Tensor], net) -> Tensor
-    a metric: (net, data_loader) -> Tensor
+    metrics can be a list of metric functions or a dictionary whose keys are the names of the metric functions.
+    a metric function: (net, data_loader) -> Tensor
     custom_optimize_step has parameter type (net, inpt, target, epoch, iteration)
     other callbacks have parameter types (net, epoch, iteration)
     batch_update_callback can return a tensor
@@ -308,7 +318,10 @@ class Trainer:
     net: nn.Module
     optimizer: torch.optim.Optimizer
     loss: Callable
-    metrics: List[Callable[[nn.Module, torch.utils.data.DataLoader], torch.Tensor]]
+    metrics: Union[
+        List[Callable[[nn.Module, torch.utils.data.DataLoader], torch.Tensor]],
+        Dict[str, Callable[[nn.Module, torch.utils.data.DataLoader], torch.Tensor]]
+    ]
     train_data_loader: torch.utils.data.DataLoader
     validation_data_loader: Optional[torch.utils.data.DataLoader] = None
     test_data_loader: Optional[torch.utils.data.DataLoader] = None
@@ -444,11 +457,14 @@ class Trainer:
             history_obj = TrainingHistory(torch.stack(running_losses),
                                           make_tensor_history(history),
                                           categories,
-                                          torch.stack(batch_metrics).unsqueeze(0))
+                                          torch.stack(batch_metrics).unsqueeze(0),
+                                          self.metrics.keys() if isinstance(self.metrics, dict) else None)
         else:
             history_obj = TrainingHistory(torch.stack(running_losses),
                                           make_tensor_history(history),
-                                          categories)
+                                          categories,
+                                          None,
+                                          self.metrics.keys() if isinstance(self.metrics, dict) else None)
 
         self.history.append(history_obj)
 
@@ -493,7 +509,7 @@ def validate(net, data_loader, metrics, eval_net=True, show_test_mark=False, pri
         print_or_silent('------>')
 
     results = []
-    for m in metrics:
+    for m in metrics if isinstance(metrics, list) else metrics.values():
         loss = m(net, data_loader).detach()
         if loss.numel() == 1:
             print_or_silent(loss.view([]).item())
